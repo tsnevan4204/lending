@@ -1,0 +1,6 @@
+2026-02-17 01:41:42,001 [main] INFO  c.d.canton.CantonCommunityApp$ - Starting Canton version 3.4.10
+2026-02-17 01:41:42,626 [main] ERROR c.d.canton.CantonCommunityApp$ - CANNOT_READ_CONFIG_FILES(8,0): At least one configuration file could not be read. err-context:{location=CantonConfig.scala:2161, unreadableFiles=List(docker/modules/localnet/canton.conf)} 
+2026-02-17 01:41:42,630 [main] ERROR c.d.canton.CantonCommunityApp$ - Failed to read config at startup: Error(List(docker/modules/localnet/canton.conf))
+2026-02-17 01:41:42,632 [Thread-0] INFO  c.d.canton.CantonCommunityApp$ - Shutting down...
+2026-02-17 01:41:42,632 [Thread-0] INFO  c.d.canton.CantonCommunityApp$ - Shutdown complete.
+2026-02-17 01:41:42,632 [Thread-0] INFO  c.d.canton.CantonCommunityApp$ - Shutting down logger. Bye bye.

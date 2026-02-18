@@ -1,0 +1,13 @@
+-- Copyright (c) 2026, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: 0BSD
+--
+-- | Shared types for the microlending domain.
+--   Privacy: visibility is enforced per-template via signatories and observers.
+module Loan.LoanTypes where
+
+-- | Status of an active loan contract.
+data LoanStatus
+  = Active
+  | Repaid
+  | Defaulted
+  deriving (Eq, Show)

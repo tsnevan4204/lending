@@ -1,0 +1,19 @@
+-- Copyright (c) 2026, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: 0BSD
+--
+-- | Selective disclosure of credit score to an authorized lender.
+--   Visible only to borrower (signatory) and the authorized lender (observer).
+module Loan.CreditScoreView where
+
+import Loan.CreditProfile
+
+-- | A view of a borrower's credit score, shared only with an authorized lender.
+--   Demonstrates selective disclosure: other lenders cannot see this.
+template CreditScoreView with
+    borrower : Party
+    authorizedLender : Party
+    creditScore : Int
+    creditProfileId : ContractId CreditProfile
+  where
+    signatory borrower
+    observer authorizedLender

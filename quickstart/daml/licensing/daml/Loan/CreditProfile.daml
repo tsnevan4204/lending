@@ -1,0 +1,76 @@
+-- Copyright (c) 2026, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: 0BSD
+--
+-- | Credit profile for a borrower. Visible only to the borrower (signatory).
+--   Privacy: no observers; other parties cannot see this contract.
+module Loan.CreditProfile where
+
+import Loan.LoanTypes ()
+import Licensing.Util as Util (require)
+
+-- | Initial credit score for new borrowers.
+initialCreditScore : Int
+initialCreditScore = 600
+
+-- | Score delta on successful repayment.
+successRepayScoreDelta : Int
+successRepayScoreDelta = 10
+
+-- | Score delta on default.
+defaultScoreDelta : Int
+defaultScoreDelta = -50
+
+-- | Min/max bounds for credit score.
+minCreditScore : Int
+minCreditScore = 300
+
+maxCreditScore : Int
+maxCreditScore = 850
+
+-- | Credit profile for a borrower. Only the borrower is signatory; no observers.
+--   Enforces privacy: other borrowers and lenders cannot see this contract.
+template CreditProfile with
+    borrower : Party
+    creditScore : Int
+    totalLoans : Int
+    successfulLoans : Int
+    defaultedLoans : Int
+    createdAt : Time
+  where
+    signatory borrower
+
+    -- | Increase score (e.g. after successful repayment).
+    choice CreditProfile_IncreaseScore : ContractId CreditProfile
+      with delta : Int
+      controller borrower
+      do
+        require "Delta must be positive" (delta > 0)
+        let newScore = min maxCreditScore (creditScore + delta)
+        create this with creditScore = newScore
+
+    -- | Decrease score (e.g. after default).
+    choice CreditProfile_DecreaseScore : ContractId CreditProfile
+      with delta : Int
+      controller borrower
+      do
+        require "Delta must be positive" (delta > 0)
+        let newScore = max minCreditScore (creditScore - delta)
+        create this with creditScore = newScore
+
+    -- | Record a successful loan (increments counter and optionally increases score).
+    choice CreditProfile_RecordSuccessfulLoan : ContractId CreditProfile
+      controller borrower
+      do
+        create this with
+          totalLoans = totalLoans + 1
+          successfulLoans = successfulLoans + 1
+          creditScore = min maxCreditScore (creditScore + successRepayScoreDelta)
+
+    -- | Record a defaulted loan (increments counter and decreases score).
+    choice CreditProfile_RecordDefaultedLoan : ContractId CreditProfile
+      controller borrower
+      do
+        create this with
+          totalLoans = totalLoans + 1
+          defaultedLoans = defaultedLoans + 1
+          creditScore = max minCreditScore (creditScore + defaultScoreDelta)

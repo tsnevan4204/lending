@@ -1,0 +1,57 @@
+-- Copyright (c) 2026, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: 0BSD
+--
+-- | Loan request created by a borrower. Visible to borrower and platform operator only.
+--   Privacy: other borrowers cannot see this; lenders see only what is disclosed via offers.
+module Loan.LoanRequest where
+
+
+-- | A request for a loan. Signatory: borrower. Observer: platform operator.
+--   Not visible to other borrowers or to lenders until disclosed via LoanRequestForLender.
+template LoanRequest with
+    borrower : Party
+    platformOperator : Party
+    amount : Decimal
+    interestRate : Decimal
+    durationDays : Int
+    purpose : Text
+    createdAt : Time
+  where
+    signatory borrower
+    observer platformOperator
+
+    -- | Borrower can withdraw the request.
+    choice LoanRequest_Withdraw : ()
+      controller borrower
+      do pure ()
+
+    -- | Platform discloses this request to a lender so they can make an offer.
+    choice LoanRequest_DiscloseToLender : ContractId LoanRequestForLender
+      with lender : Party
+      controller platformOperator
+      do
+        create LoanRequestForLender with
+          platformOperator = platformOperator
+          lender = lender
+          requestId = self
+          borrower = borrower
+          amount = amount
+          interestRate = interestRate
+          durationDays = durationDays
+          purpose = purpose
+          createdAt = createdAt
+
+-- | Platform-created view of a loan request, visible to one lender. Privacy: only that lender sees it.
+template LoanRequestForLender with
+    platformOperator : Party
+    lender : Party
+    requestId : ContractId LoanRequest
+    borrower : Party
+    amount : Decimal
+    interestRate : Decimal
+    durationDays : Int
+    purpose : Text
+    createdAt : Time
+  where
+    signatory platformOperator
+    observer lender

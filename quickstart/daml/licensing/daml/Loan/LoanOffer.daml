@@ -1,0 +1,48 @@
+-- Copyright (c) 2026, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: 0BSD
+--
+-- | Offer from a lender to a borrower. Visible only to lender (signatory) and borrower (observer).
+--   Privacy: other lenders cannot see this offer.
+module Loan.LoanOffer where
+
+import DA.Time (addRelTime, days)
+import Loan.LoanRequest
+import Loan.LoanTypes (LoanStatus(Active))
+import Loan.CreditProfile
+import Loan.Loan
+import Licensing.Util as Util (require)
+
+-- | Offer by a lender to fund a loan request. Signatory: lender. Observer: borrower.
+--   Not visible to other lenders.
+template LoanOffer with
+    lender : Party
+    borrower : Party
+    loanRequestId : ContractId LoanRequest
+    amount : Decimal
+    interestRate : Decimal
+    createdAt : Time
+  where
+    signatory lender
+    observer borrower
+
+    -- | Borrower accepts the offer; consumes LoanRequest and LoanOffer, creates Loan.
+    choice LoanOffer_Accept : (ContractId Loan, ContractId CreditProfile)
+      with creditProfileId : ContractId CreditProfile
+      controller borrower
+      do
+        request <- fetch loanRequestId
+        require "Amount must match request" (request.amount == amount)
+        require "Borrower must match" (request.borrower == borrower)
+        archive loanRequestId
+        now <- getTime
+        let dueDate = addRelTime now (days request.durationDays)
+        loanCid <- create Loan with
+          lender = lender
+          borrower = borrower
+          principal = amount
+          interestRate = interestRate
+          dueDate = dueDate
+          creditProfileId = creditProfileId
+          status = Active
+        -- Return updated profile id (caller may exercise RecordSuccessfulLoan later on repay)
+        pure (loanCid, creditProfileId)

@@ -1,0 +1,39 @@
+-- Copyright (c) 2026, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: 0BSD
+--
+-- | Active loan contract. Visible to lender and borrower only.
+--   Privacy: other lenders and borrowers cannot see this contract.
+module Loan.Loan where
+
+import Loan.LoanTypes
+import Loan.CreditProfile
+import Licensing.Util as Util (require)
+
+-- | An active loan. Signatories: lender and borrower. No other observers.
+--   Repayment and default choices update the borrower's credit profile.
+template Loan with
+    lender : Party
+    borrower : Party
+    principal : Decimal
+    interestRate : Decimal
+    dueDate : Time
+    creditProfileId : ContractId CreditProfile
+    status : LoanStatus
+  where
+    signatory lender, borrower
+
+    -- | Borrower repays the loan. Archives the loan and updates credit profile positively.
+    choice Loan_RepayLoan : (ContractId CreditProfile, ())
+      controller borrower
+      do
+        require "Loan must be active" (status == Active)
+        newProfileCid <- exercise creditProfileId CreditProfile_RecordSuccessfulLoan
+        return (newProfileCid, ())
+
+    -- | Mark the loan as defaulted. Archives the loan and updates credit profile negatively.
+    choice Loan_MarkDefault : (ContractId CreditProfile, ())
+      controller lender
+      do
+        require "Loan must be active" (status == Active)
+        newProfileCid <- exercise creditProfileId CreditProfile_RecordDefaultedLoan
+        return (newProfileCid, ())
