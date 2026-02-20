@@ -32,6 +32,10 @@ import quickstart_licensing.loan.loanoffer.LoanPrincipalRequest;
 import quickstart_licensing.loan.loanrepaymentrequest.LoanRepaymentRequest;
 import quickstart_licensing.loan.loanrequest.LoanRequest;
 import quickstart_licensing.loan.loanrequest.LoanRequestForLender;
+import quickstart_licensing.loan.marketmaker.LenderBid;
+import quickstart_licensing.loan.marketmaker.BorrowerAsk;
+import quickstart_licensing.loan.marketmaker.MatchingEngine;
+import quickstart_licensing.loan.marketmaker.MatchedLoanProposal;
 import splice_api_token_allocation_request_v1.splice.api.token.allocationrequestv1.AllocationRequest;
 import splice_api_token_allocation_v1.splice.api.token.allocationv1.Allocation;
 
@@ -493,5 +497,56 @@ public class DamlRepository {
             String borrowerParty) {
         return pqs.activeWhere(LoanRepaymentRequest.class, "borrower", borrowerParty)
                 .exceptionally(ex -> handlePqsTemplateNotFound(ex, "LoanRepaymentRequest"));
+    }
+
+    // --- Market Maker module ---
+
+    public CompletableFuture<List<Contract<LenderBid>>> findActiveLenderBids() {
+        return pqs.active(LenderBid.class)
+                .exceptionally(ex -> handlePqsTemplateNotFound(ex, "LenderBid"));
+    }
+
+    public CompletableFuture<List<Contract<LenderBid>>> findActiveLenderBidsByLender(String lenderParty) {
+        return pqs.activeWhere(LenderBid.class,
+                "(payload->>'lender' = ? OR payload->'lender'->>'party' = ?)",
+                lenderParty, lenderParty)
+                .exceptionally(ex -> handlePqsTemplateNotFound(ex, "LenderBid"));
+    }
+
+    public CompletableFuture<Optional<Contract<LenderBid>>> findLenderBidById(String contractId) {
+        return pqs.contractByContractId(LenderBid.class, contractId)
+                .exceptionally(ex -> handlePqsTemplateNotFoundOptional(ex, "LenderBid"));
+    }
+
+    public CompletableFuture<List<Contract<BorrowerAsk>>> findActiveBorrowerAsks() {
+        return pqs.active(BorrowerAsk.class)
+                .exceptionally(ex -> handlePqsTemplateNotFound(ex, "BorrowerAsk"));
+    }
+
+    public CompletableFuture<List<Contract<BorrowerAsk>>> findActiveBorrowerAsksByBorrower(String borrowerParty) {
+        return pqs.activeWhere(BorrowerAsk.class,
+                "(payload->>'borrower' = ? OR payload->'borrower'->>'party' = ?)",
+                borrowerParty, borrowerParty)
+                .exceptionally(ex -> handlePqsTemplateNotFound(ex, "BorrowerAsk"));
+    }
+
+    public CompletableFuture<Optional<Contract<BorrowerAsk>>> findBorrowerAskById(String contractId) {
+        return pqs.contractByContractId(BorrowerAsk.class, contractId)
+                .exceptionally(ex -> handlePqsTemplateNotFoundOptional(ex, "BorrowerAsk"));
+    }
+
+    public CompletableFuture<Optional<Contract<MatchingEngine>>> findMatchingEngine(String platformParty) {
+        return pqs.activeWhere(MatchingEngine.class,
+                "(payload->>'platformOperator' = ? OR payload->'platformOperator'->>'party' = ?)",
+                platformParty, platformParty)
+                .thenApply(list -> list.isEmpty() ? Optional.<Contract<MatchingEngine>>empty() : Optional.of(list.get(0)))
+                .exceptionally(ex -> DamlRepository.<MatchingEngine>handlePqsTemplateNotFoundOptional(ex, "MatchingEngine"));
+    }
+
+    public CompletableFuture<List<Contract<MatchedLoanProposal>>> findMatchedLoanProposals(String party) {
+        return pqs.activeWhere(MatchedLoanProposal.class,
+                "(payload->>'lender' = ? OR payload->'lender'->>'party' = ? OR payload->>'borrower' = ? OR payload->'borrower'->>'party' = ?)",
+                party, party, party, party)
+                .exceptionally(ex -> handlePqsTemplateNotFound(ex, "MatchedLoanProposal"));
     }
 }

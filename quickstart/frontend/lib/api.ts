@@ -17,9 +17,13 @@ import type {
   ApiLoanOffer,
   ApiLoan,
   ApiCreditProfile,
+  ApiLenderBid,
+  ApiBorrowerAsk,
   LoanRequestCreate,
   LoanOfferCreate,
   LoanFundRequest,
+  LenderBidCreate,
+  BorrowerAskCreate,
 } from "@/lib/api-types"
 
 const API_BASE = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "/api") : ""
@@ -214,32 +218,105 @@ export async function markLoanDefault(loanContractId: string): Promise<void> {
   await postApi(`/loans/${encodeURIComponent(loanContractId)}:mark-default?commandId=${encodeURIComponent(commandId())}`)
 }
 
-// --- Not yet in backend: order book & platform stats. Stub so UI can switch when backend adds them. ---
+// --- Market Making / Order Book ---
 
-/** List lender bids (order book). Not implemented in backend yet; return empty. */
+function mapLenderBid(b: ApiLenderBid): LenderBid {
+  return {
+    id: b.contractId,
+    contractId: b.contractId,
+    lender: b.lender,
+    amount: b.amount,
+    remainingAmount: b.remainingAmount,
+    minInterestRate: b.minInterestRate,
+    maxDuration: b.maxDuration,
+    status: b.remainingAmount <= 0 ? "filled" : b.remainingAmount < b.amount ? "partial" : "active",
+    createdAt: b.createdAt,
+  }
+}
+
+function mapBorrowerAsk(a: ApiBorrowerAsk): BorrowerAsk {
+  return {
+    id: a.contractId,
+    contractId: a.contractId,
+    borrower: a.borrower,
+    amount: a.amount,
+    maxInterestRate: a.maxInterestRate,
+    duration: a.duration,
+    status: "active",
+    createdAt: a.createdAt,
+  }
+}
+
+/** List active lender bids. */
 export async function listLenderBids(): Promise<LenderBid[]> {
   try {
-    const res = await fetch(`${API_BASE}/lender-bids`, { credentials: "include" })
-    if (res.status === 404) return []
-    if (!res.ok) return []
-    const data = await res.json()
-    return Array.isArray(data) ? data : []
+    const raw = await fetchApi<ApiLenderBid[]>("/market/lender-bids")
+    return (raw || []).map(mapLenderBid)
   } catch {
     return []
   }
 }
 
-/** List borrower asks (order book). Not implemented in backend yet; return empty. */
+/** List active borrower asks. */
 export async function listBorrowerAsks(): Promise<BorrowerAsk[]> {
   try {
-    const res = await fetch(`${API_BASE}/borrower-asks`, { credentials: "include" })
-    if (res.status === 404) return []
-    if (!res.ok) return []
-    const data = await res.json()
-    return Array.isArray(data) ? data : []
+    const raw = await fetchApi<ApiBorrowerAsk[]>("/market/borrower-asks")
+    return (raw || []).map(mapBorrowerAsk)
   } catch {
     return []
   }
+}
+
+/** Create a lender bid. */
+export async function createLenderBid(payload: {
+  amount: number
+  minInterestRate: number
+  maxDuration: number
+}): Promise<LenderBid> {
+  const body: LenderBidCreate = {
+    amount: payload.amount,
+    minInterestRate: payload.minInterestRate,
+    maxDuration: payload.maxDuration,
+  }
+  const raw = await postApi<ApiLenderBid>(
+    "/market/lender-bids?commandId=" + encodeURIComponent(commandId()),
+    body
+  )
+  return mapLenderBid(raw)
+}
+
+/** Create a borrower ask. */
+export async function createBorrowerAsk(payload: {
+  amount: number
+  maxInterestRate: number
+  duration: number
+  creditProfileId: string
+}): Promise<BorrowerAsk> {
+  const body: BorrowerAskCreate = {
+    amount: payload.amount,
+    maxInterestRate: payload.maxInterestRate,
+    duration: payload.duration,
+    creditProfileId: payload.creditProfileId,
+  }
+  const raw = await postApi<ApiBorrowerAsk>(
+    "/market/borrower-asks?commandId=" + encodeURIComponent(commandId()),
+    body
+  )
+  return mapBorrowerAsk(raw)
+}
+
+/** Cancel a lender bid. */
+export async function cancelLenderBid(contractId: string): Promise<void> {
+  await fetchApi(`/market/lender-bids/${encodeURIComponent(contractId)}?commandId=${encodeURIComponent(commandId())}`, {
+    method: "DELETE",
+  })
+}
+
+/** Cancel a borrower ask. */
+export async function cancelBorrowerAsk(contractId: string): Promise<void> {
+  await fetchApi(`/market/borrower-asks/${encodeURIComponent(contractId)}?commandId=${encodeURIComponent(commandId())}`, {
+    method: "DELETE",
+  })
 }
 
 /** Platform stats. Not implemented in backend yet; return null so UI can use mock. */

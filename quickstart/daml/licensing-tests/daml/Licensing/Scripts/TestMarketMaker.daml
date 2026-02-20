@@ -1,0 +1,217 @@
+module Licensing.Scripts.TestMarketMaker where
+
+import Daml.Script
+import DA.Assert
+
+import Splice.Testing.Utils
+
+import Loan.MarketMaker
+import Loan.CreditProfile
+import Loan.Loan
+
+-- | Helper: allocate standard parties and set up matching engine + credit profile.
+setupMarketMakerTest : Script (Party, Party, Party, ContractId MatchingEngine, ContractId CreditProfile)
+setupMarketMakerTest = script do
+  lender <- allocatePartyExact "lender"
+  borrower <- allocatePartyExact "borrower"
+  platform <- allocatePartyExact "platform"
+
+  engineCid <- submit platform $ createCmd MatchingEngine with
+    platformOperator = platform
+
+  now <- getTime
+  creditProfileCid <- submit borrower $ createCmd CreditProfile with
+    borrower
+    creditScore = initialCreditScore
+    totalLoans = 0
+    successfulLoans = 0
+    defaultedLoans = 0
+    createdAt = now
+
+  pure (lender, borrower, platform, engineCid, creditProfileCid)
+
+-- | Full match: bid amount == ask amount. Both consumed, proposal created.
+testFullMatch : Script ()
+testFullMatch = script do
+  (lender, borrower, platform, engineCid, creditProfileCid) <- setupMarketMakerTest
+  now <- getTime
+
+  bidCid <- submit lender $ createCmd LenderBid with
+    lender
+    platformOperator = platform
+    amount = 1000.0
+    remainingAmount = 1000.0
+    minInterestRate = 3.0
+    maxDuration = 90
+    createdAt = now
+
+  askCid <- submit borrower $ createCmd BorrowerAsk with
+    borrower
+    platformOperator = platform
+    amount = 1000.0
+    maxInterestRate = 5.0
+    duration = 60
+    creditProfileId = creditProfileCid
+    createdAt = now
+
+  proposalCid <- submit platform $ exerciseCmd engineCid MatchOrders with
+    bidCid
+    askCid
+
+  -- Both bid and ask should be archived
+  bids <- query @LenderBid lender
+  length bids === 0
+
+  asks <- query @BorrowerAsk borrower
+  length asks === 0
+
+  -- Proposal should exist
+  [proposal] <- query @MatchedLoanProposal platform
+  proposal._2.principal === 1000.0
+  proposal._2.interestRate === 4.0
+
+  -- Both parties accept the proposal to create the loan
+  _loanCid <- submitMulti [lender, borrower] [] $ exerciseCmd proposalCid MatchedLoanProposal_Accept
+
+  [loan] <- query @Loan lender
+  loan._2.principal === 1000.0
+  loan._2.interestRate === 4.0
+  loan._2.borrower === borrower
+
+-- | Partial fill: bid amount > ask amount. Remainder bid created.
+testPartialFill : Script ()
+testPartialFill = script do
+  (lender, borrower, platform, engineCid, creditProfileCid) <- setupMarketMakerTest
+  now <- getTime
+
+  bidCid <- submit lender $ createCmd LenderBid with
+    lender
+    platformOperator = platform
+    amount = 5000.0
+    remainingAmount = 5000.0
+    minInterestRate = 4.0
+    maxDuration = 120
+    createdAt = now
+
+  askCid <- submit borrower $ createCmd BorrowerAsk with
+    borrower
+    platformOperator = platform
+    amount = 2000.0
+    maxInterestRate = 6.0
+    duration = 60
+    creditProfileId = creditProfileCid
+    createdAt = now
+
+  _proposalCid <- submit platform $ exerciseCmd engineCid MatchOrders with
+    bidCid
+    askCid
+
+  -- Ask should be fully consumed
+  asks <- query @BorrowerAsk borrower
+  length asks === 0
+
+  -- Remainder bid should exist with reduced amount
+  [remainderBid] <- query @LenderBid lender
+  remainderBid._2.remainingAmount === 3000.0
+  remainderBid._2.amount === 5000.0
+
+  -- Proposal should reflect the matched amount
+  [proposal] <- query @MatchedLoanProposal platform
+  proposal._2.principal === 2000.0
+  proposal._2.interestRate === 5.0
+
+-- | Rate mismatch: bid minInterestRate > ask maxInterestRate. Should fail.
+testRateMismatchRejection : Script ()
+testRateMismatchRejection = script do
+  (lender, borrower, platform, engineCid, creditProfileCid) <- setupMarketMakerTest
+  now <- getTime
+
+  bidCid <- submit lender $ createCmd LenderBid with
+    lender
+    platformOperator = platform
+    amount = 1000.0
+    remainingAmount = 1000.0
+    minInterestRate = 8.0
+    maxDuration = 90
+    createdAt = now
+
+  askCid <- submit borrower $ createCmd BorrowerAsk with
+    borrower
+    platformOperator = platform
+    amount = 1000.0
+    maxInterestRate = 5.0
+    duration = 60
+    creditProfileId = creditProfileCid
+    createdAt = now
+
+  submitMustFail platform $ exerciseCmd engineCid MatchOrders with
+    bidCid
+    askCid
+
+-- | Duration mismatch: ask duration > bid maxDuration. Should fail.
+testDurationMismatchRejection : Script ()
+testDurationMismatchRejection = script do
+  (lender, borrower, platform, engineCid, creditProfileCid) <- setupMarketMakerTest
+  now <- getTime
+
+  bidCid <- submit lender $ createCmd LenderBid with
+    lender
+    platformOperator = platform
+    amount = 1000.0
+    remainingAmount = 1000.0
+    minInterestRate = 3.0
+    maxDuration = 30
+    createdAt = now
+
+  askCid <- submit borrower $ createCmd BorrowerAsk with
+    borrower
+    platformOperator = platform
+    amount = 1000.0
+    maxInterestRate = 5.0
+    duration = 60
+    creditProfileId = creditProfileCid
+    createdAt = now
+
+  submitMustFail platform $ exerciseCmd engineCid MatchOrders with
+    bidCid
+    askCid
+
+-- | Bid cancellation: lender cancels their bid.
+testBidCancellation : Script ()
+testBidCancellation = script do
+  (lender, _borrower, platform, _engineCid, _creditProfileCid) <- setupMarketMakerTest
+  now <- getTime
+
+  bidCid <- submit lender $ createCmd LenderBid with
+    lender
+    platformOperator = platform
+    amount = 1000.0
+    remainingAmount = 1000.0
+    minInterestRate = 3.0
+    maxDuration = 90
+    createdAt = now
+
+  submit lender $ exerciseCmd bidCid LenderBid_Cancel
+
+  bids <- query @LenderBid lender
+  length bids === 0
+
+-- | Ask cancellation: borrower cancels their ask.
+testAskCancellation : Script ()
+testAskCancellation = script do
+  (_lender, borrower, platform, _engineCid, creditProfileCid) <- setupMarketMakerTest
+  now <- getTime
+
+  askCid <- submit borrower $ createCmd BorrowerAsk with
+    borrower
+    platformOperator = platform
+    amount = 1000.0
+    maxInterestRate = 5.0
+    duration = 60
+    creditProfileId = creditProfileCid
+    createdAt = now
+
+  submit borrower $ exerciseCmd askCid BorrowerAsk_Cancel
+
+  asks <- query @BorrowerAsk borrower
+  length asks === 0

@@ -34,6 +34,8 @@ export default function DenverLendingApp() {
     fundLoan,
     repayLoan,
     markLoanDefault,
+    createLenderBid,
+    cancelLenderBid,
   } = useDenverData(role)
 
   function handleLogin(selectedRole: "borrower" | "lender") {
@@ -139,6 +141,8 @@ export default function DenverLendingApp() {
                 bids={bids}
                 onMakeOffer={createLoanOffer}
                 onMarkDefault={markLoanDefault}
+                onPlaceBid={createLenderBid}
+                onCancelBid={cancelLenderBid}
               />
             )}
 

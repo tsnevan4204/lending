@@ -58,3 +58,35 @@ export interface LoanOfferCreate {
 export interface LoanFundRequest {
   creditProfileId: string
 }
+
+export interface ApiLenderBid {
+  contractId: string
+  lender: string
+  amount: number
+  remainingAmount: number
+  minInterestRate: number
+  maxDuration: number
+  createdAt: string
+}
+
+export interface ApiBorrowerAsk {
+  contractId: string
+  borrower: string
+  amount: number
+  maxInterestRate: number
+  duration: number
+  createdAt: string
+}
+
+export interface LenderBidCreate {
+  amount: number
+  minInterestRate: number
+  maxDuration: number
+}
+
+export interface BorrowerAskCreate {
+  amount: number
+  maxInterestRate: number
+  duration: number
+  creditProfileId: string
+}

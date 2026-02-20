@@ -13,6 +13,7 @@ tags:
   - name: Licenses
   - name: licenses Renewal Requests
   - name: Loans
+  - name: Market
 
 paths:
   /feature-flags:
@@ -799,6 +800,147 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /market/lender-bids:
+    get:
+      tags: [Market]
+      summary: List active lender bids
+      operationId: listLenderBids
+      responses:
+        '200':
+          description: A list of active lender bids
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LenderBidResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Market]
+      summary: Create a lender bid
+      operationId: createLenderBid
+      parameters:
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LenderBidCreate'
+      responses:
+        '201':
+          description: Lender bid created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LenderBidResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /market/lender-bids/{contractId}:
+    delete:
+      tags: [Market]
+      summary: Cancel a lender bid
+      operationId: cancelLenderBid
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '204':
+          description: Lender bid cancelled
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /market/borrower-asks:
+    get:
+      tags: [Market]
+      summary: List active borrower asks
+      operationId: listBorrowerAsks
+      responses:
+        '200':
+          description: A list of active borrower asks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BorrowerAskResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Market]
+      summary: Create a borrower ask
+      operationId: createBorrowerAsk
+      parameters:
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BorrowerAskCreate'
+      responses:
+        '201':
+          description: Borrower ask created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BorrowerAskResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /market/borrower-asks/{contractId}:
+    delete:
+      tags: [Market]
+      summary: Cancel a borrower ask
+      operationId: cancelBorrowerAsk
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '204':
+          description: Borrower ask cancelled
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /market/match:
+    post:
+      tags: [Market]
+      summary: Manually trigger order matching (admin/platform)
+      operationId: triggerMatch
+      parameters:
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '200':
+          description: Matching cycle completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   parameters:
     ContractId:
@@ -1534,3 +1676,77 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    LenderBidCreate:
+      type: object
+      required: [ amount, minInterestRate, maxDuration ]
+      properties:
+        amount:
+          type: number
+          format: double
+        minInterestRate:
+          type: number
+          format: double
+        maxDuration:
+          type: integer
+
+    LenderBidResponse:
+      type: object
+      required: [ contractId, lender, amount, remainingAmount, minInterestRate, maxDuration, createdAt ]
+      properties:
+        contractId:
+          type: string
+        lender:
+          type: string
+        amount:
+          type: number
+        remainingAmount:
+          type: number
+        minInterestRate:
+          type: number
+        maxDuration:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    BorrowerAskCreate:
+      type: object
+      required: [ amount, maxInterestRate, duration, creditProfileId ]
+      properties:
+        amount:
+          type: number
+          format: double
+        maxInterestRate:
+          type: number
+          format: double
+        duration:
+          type: integer
+        creditProfileId:
+          type: string
+
+    BorrowerAskResponse:
+      type: object
+      required: [ contractId, borrower, amount, maxInterestRate, duration, createdAt ]
+      properties:
+        contractId:
+          type: string
+        borrower:
+          type: string
+        amount:
+          type: number
+        maxInterestRate:
+          type: number
+        duration:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    MatchResult:
+      type: object
+      properties:
+        matchesCreated:
+          type: integer
+        message:
+          type: string

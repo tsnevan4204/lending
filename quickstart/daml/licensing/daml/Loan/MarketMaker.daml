@@ -1,0 +1,141 @@
+-- Copyright (c) 2026, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: 0BSD
+--
+-- | Market-making order book: LenderBid, BorrowerAsk, MatchingEngine, and MatchedLoanProposal.
+--   The platform operator matches overlapping bids/asks and creates loan proposals
+--   that both parties must accept before the Loan is finalized.
+module Loan.MarketMaker where
+
+import DA.Time (addRelTime, days)
+import Loan.LoanTypes (LoanStatus(Active))
+import Loan.CreditProfile
+import Loan.Loan
+import Licensing.Util as Util (require)
+
+-- | A lender posts liquidity into the order book.
+--   Visible to the lender (signatory) and platform operator (observer).
+template LenderBid with
+    lender : Party
+    platformOperator : Party
+    amount : Decimal
+    remainingAmount : Decimal
+    minInterestRate : Decimal
+    maxDuration : Int
+    createdAt : Time
+  where
+    signatory lender
+    observer platformOperator
+
+    choice LenderBid_Cancel : ()
+      controller lender
+      do pure ()
+
+    choice LenderBid_MatchConsume : ()
+      controller platformOperator
+      do pure ()
+
+    choice LenderBid_ReduceRemaining : ContractId LenderBid
+      with newRemaining : Decimal
+      controller platformOperator
+      do
+        require "New remaining must be positive" (newRemaining > 0.0)
+        require "New remaining must be less than current" (newRemaining < remainingAmount)
+        create this with remainingAmount = newRemaining
+
+-- | A borrower posts a loan request into the order book.
+--   Visible to the borrower (signatory) and platform operator (observer).
+template BorrowerAsk with
+    borrower : Party
+    platformOperator : Party
+    amount : Decimal
+    maxInterestRate : Decimal
+    duration : Int
+    creditProfileId : ContractId CreditProfile
+    createdAt : Time
+  where
+    signatory borrower
+    observer platformOperator
+
+    choice BorrowerAsk_Cancel : ()
+      controller borrower
+      do pure ()
+
+    choice BorrowerAsk_MatchConsume : ()
+      controller platformOperator
+      do pure ()
+
+-- | Singleton matching engine operated by the platform.
+--   The MatchOrders choice matches a bid against an ask, handling partial fills.
+template MatchingEngine with
+    platformOperator : Party
+  where
+    signatory platformOperator
+
+    nonconsuming choice MatchOrders : ContractId MatchedLoanProposal
+      with
+        bidCid : ContractId LenderBid
+        askCid : ContractId BorrowerAsk
+      controller platformOperator
+      do
+        bid <- fetch bidCid
+        ask <- fetch askCid
+        require "Interest rates must overlap" (bid.minInterestRate <= ask.maxInterestRate)
+        require "Duration must fit bid max" (ask.duration <= bid.maxDuration)
+        let matchedAmount = min bid.remainingAmount ask.amount
+            agreedRate = (bid.minInterestRate + ask.maxInterestRate) / 2.0
+
+        exercise askCid BorrowerAsk_MatchConsume
+
+        if bid.remainingAmount == matchedAmount
+          then exercise bidCid LenderBid_MatchConsume
+          else do
+            exercise bidCid LenderBid_ReduceRemaining with
+              newRemaining = bid.remainingAmount - matchedAmount
+            pure ()
+
+        now <- getTime
+        create MatchedLoanProposal with
+          lender = bid.lender
+          borrower = ask.borrower
+          platformOperator
+          principal = matchedAmount
+          interestRate = agreedRate
+          durationDays = ask.duration
+          creditProfileId = ask.creditProfileId
+          matchedAt = now
+
+-- | Proposal created by the matching engine. Both lender and borrower must accept
+--   before the Loan is created. Preserves DAML's multi-signatory authorization model.
+template MatchedLoanProposal with
+    lender : Party
+    borrower : Party
+    platformOperator : Party
+    principal : Decimal
+    interestRate : Decimal
+    durationDays : Int
+    creditProfileId : ContractId CreditProfile
+    matchedAt : Time
+  where
+    signatory platformOperator
+    observer lender, borrower
+
+    choice MatchedLoanProposal_Accept : ContractId Loan
+      controller lender, borrower
+      do
+        let dueDate = addRelTime matchedAt (days durationDays)
+        create Loan with
+          lender
+          borrower
+          principal
+          interestRate
+          dueDate
+          creditProfileId
+          status = Active
+
+    choice MatchedLoanProposal_Reject : ()
+      controller lender
+      do pure ()
+
+    choice MatchedLoanProposal_Withdraw : ()
+      controller borrower
+      do pure ()

@@ -105,13 +105,32 @@ function MakeOfferForm({
   )
 }
 
-function PlaceBidForm({ onClose }: { onClose: () => void }) {
+function PlaceBidForm({
+  onClose,
+  onSubmit,
+}: {
+  onClose: () => void
+  onSubmit?: (payload: { amount: number; minInterestRate: number; maxDuration: number }) => Promise<void>
+}) {
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    setError(null)
+    const form = e.currentTarget
+    const amount = Number((form.querySelector("#bid-amount") as HTMLInputElement)?.value) || 0
+    const minInterestRate = Number((form.querySelector("#min-rate") as HTMLInputElement)?.value) || 0
+    const maxDuration = Number((form.querySelector("#max-dur") as HTMLInputElement)?.value) || 0
     setLoading(true)
-    setTimeout(() => { setLoading(false); onClose() }, 1500)
+    try {
+      if (onSubmit) await onSubmit({ amount, minInterestRate, maxDuration })
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to place bid")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -133,6 +152,7 @@ function PlaceBidForm({ onClose }: { onClose: () => void }) {
           <Input id="max-dur" type="number" placeholder="24" required />
         </div>
       </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
       <Button type="submit" className="w-full mt-2 bg-primary text-primary-foreground hover:bg-primary/90" disabled={loading}>
         {loading ? (<><Loader2 className="size-4 animate-spin" />Placing Bid...</>) : "Place Lender Bid"}
       </Button>
@@ -146,12 +166,16 @@ export function LenderDashboard({
   bids,
   onMakeOffer,
   onMarkDefault,
+  onPlaceBid,
+  onCancelBid,
 }: {
   requests: LoanRequest[]
   loans: ActiveLoan[]
   bids: LenderBid[]
   onMakeOffer?: (payload: { loanRequestId: string; amount: number; interestRate: number }) => Promise<void>
   onMarkDefault?: (loanContractId: string) => Promise<void>
+  onPlaceBid?: (payload: { amount: number; minInterestRate: number; maxDuration: number }) => Promise<void>
+  onCancelBid?: (contractId: string) => Promise<void>
 }) {
   const [offerDialog, setOfferDialog] = useState<LoanRequest | null>(null)
   const [bidDialogOpen, setBidDialogOpen] = useState(false)
@@ -175,7 +199,7 @@ export function LenderDashboard({
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Place Lender Bid</DialogTitle></DialogHeader>
-            <PlaceBidForm onClose={() => setBidDialogOpen(false)} />
+            <PlaceBidForm onClose={() => setBidDialogOpen(false)} onSubmit={onPlaceBid} />
           </DialogContent>
         </Dialog>
       </motion.div>
@@ -261,7 +285,13 @@ export function LenderDashboard({
                   </div>
                 </div>
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                  <Button size="sm" variant="ghost" className="text-xs text-destructive hover:text-destructive hover:bg-destructive/5 shrink-0 h-8">Cancel</Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs text-destructive hover:text-destructive hover:bg-destructive/5 shrink-0 h-8"
+                    onClick={() => onCancelBid?.(bid.contractId)}
+                    disabled={!onCancelBid}
+                  >Cancel</Button>
                 </motion.div>
               </motion.div>
             ))}

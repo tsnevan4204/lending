@@ -23,6 +23,10 @@ import {
   fundLoan as apiFundLoan,
   repayLoan as apiRepayLoan,
   markLoanDefault as apiMarkLoanDefault,
+  createLenderBid as apiCreateLenderBid,
+  createBorrowerAsk as apiCreateBorrowerAsk,
+  cancelLenderBid as apiCancelLenderBid,
+  cancelBorrowerAsk as apiCancelBorrowerAsk,
 } from "@/lib/api"
 import {
   mockLoanRequests,
@@ -160,6 +164,42 @@ export function useDenverData(role: "borrower" | "lender") {
     [useApi, refresh]
   )
 
+  const createLenderBid = useCallback(
+    async (payload: { amount: number; minInterestRate: number; maxDuration: number }) => {
+      if (!useApi) return
+      await apiCreateLenderBid(payload)
+      await refresh()
+    },
+    [useApi, refresh]
+  )
+
+  const createBorrowerAsk = useCallback(
+    async (payload: { amount: number; maxInterestRate: number; duration: number; creditProfileId: string }) => {
+      if (!useApi) return
+      await apiCreateBorrowerAsk(payload)
+      await refresh()
+    },
+    [useApi, refresh]
+  )
+
+  const cancelLenderBid = useCallback(
+    async (contractId: string) => {
+      if (!useApi) return
+      await apiCancelLenderBid(contractId)
+      await refresh()
+    },
+    [useApi, refresh]
+  )
+
+  const cancelBorrowerAsk = useCallback(
+    async (contractId: string) => {
+      if (!useApi) return
+      await apiCancelBorrowerAsk(contractId)
+      await refresh()
+    },
+    [useApi, refresh]
+  )
+
   return {
     requests,
     offers,
@@ -177,5 +217,9 @@ export function useDenverData(role: "borrower" | "lender") {
     fundLoan,
     repayLoan,
     markLoanDefault,
+    createLenderBid,
+    createBorrowerAsk,
+    cancelLenderBid,
+    cancelBorrowerAsk,
   }
 }
