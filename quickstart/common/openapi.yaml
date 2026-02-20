@@ -1437,10 +1437,13 @@ components:
           type: number
         interestRate:
           type: number
+        durationDays:
+          type: integer
+          description: Loan term in days (lender-proposed). If omitted, uses the request's duration.
 
     LoanOffer:
       type: object
-      required: [ contractId, lender, borrower, amount, interestRate, createdAt ]
+      required: [ contractId, lender, borrower, amount, interestRate, durationDays, createdAt ]
       properties:
         contractId:
           type: string
@@ -1455,6 +1458,8 @@ components:
           type: number
         interestRate:
           type: number
+        durationDays:
+          type: integer
         createdAt:
           type: string
           format: date-time

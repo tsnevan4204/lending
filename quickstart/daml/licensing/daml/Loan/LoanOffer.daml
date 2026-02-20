@@ -19,12 +19,13 @@ import Splice.Api.Token.AllocationRequestV1
 import Splice.Api.Token.AllocationV1 as Api.Token.AllocationV1
 
 -- | Offer by a lender to fund a loan request. Signatory: lender. Observer: borrower.
---   Not visible to other lenders.
+--   Not visible to other lenders. Lender may propose amount, rate, and duration (term).
 template LoanOffer with
     lender : Party
     borrower : Party
     amount : Decimal
     interestRate : Decimal
+    durationDays : Int
     createdAt : Time
     loanRequestId : ContractId LoanRequest
   where
@@ -41,7 +42,7 @@ template LoanOffer with
         require "Borrower must match" (request.borrower == borrower)
         archive loanRequestId
         now <- getTime
-        let dueDate = addRelTime now (days request.durationDays)
+        let dueDate = addRelTime now (days durationDays)
         loanCid <- create Loan with
           lender = lender
           borrower = borrower
@@ -76,7 +77,7 @@ template LoanOffer with
           borrower
           principal = amount
           interestRate
-          durationDays = request.durationDays
+          durationDays = durationDays
           principalInstrumentId
           prepareUntil
           settleBefore

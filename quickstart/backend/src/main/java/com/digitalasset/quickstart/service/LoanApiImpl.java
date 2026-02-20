@@ -231,12 +231,16 @@ public class LoanApiImpl implements LoansApi {
                                                 ? loanOfferCreate.getAmount() : forLender.payload.getAmount;
                                         BigDecimal rate = loanOfferCreate.getInterestRate() != null && loanOfferCreate.getInterestRate().compareTo(BigDecimal.ZERO) > 0
                                                 ? loanOfferCreate.getInterestRate() : forLender.payload.getInterestRate;
+                                        long durationDays = (loanOfferCreate.getDurationDays() != null && loanOfferCreate.getDurationDays() > 0)
+                                                ? loanOfferCreate.getDurationDays().longValue()
+                                                : (forLender.payload.getDurationDays != null ? forLender.payload.getDurationDays : 360L);
                                         // Use the underlying LoanRequest contract id from the ForLender payload, not the wrapper's id.
                                         LoanOffer template = new LoanOffer(
                                                 new Party(party),
                                                 forLender.payload.getBorrower,
                                                 amount,
                                                 rate,
+                                                durationDays,
                                                 now,
                                                 forLender.payload.getRequestId);
                                         String offerCmdId = commandId != null ? commandId : UUID.randomUUID().toString();
@@ -250,12 +254,20 @@ public class LoanApiImpl implements LoansApi {
                                                     return delay.thenCompose(_unused ->
                                                             damlRepository.findActiveLoanOffersByLenderOrBorrower(party)
                                                                     .thenApply(offers -> {
+                                                                        long dur = durationDays;
                                                                         String cid = offers.stream()
                                                                                 .filter(o -> party.equals(o.payload.getLender.getParty)
                                                                                         && borrowerPartyForLender.equals(o.payload.getBorrower.getParty)
-                                                                                        && finalAmount.compareTo(o.payload.getAmount) == 0)
+                                                                                        && finalAmount.compareTo(o.payload.getAmount) == 0
+                                                                                        && o.payload.getDurationDays != null && o.payload.getDurationDays == dur)
                                                                                 .map(o -> o.contractId.getContractId)
-                                                                                .findFirst().orElse("");
+                                                                                .findFirst()
+                                                                                .orElseGet(() -> offers.stream()
+                                                                                        .filter(o -> party.equals(o.payload.getLender.getParty)
+                                                                                                && borrowerPartyForLender.equals(o.payload.getBorrower.getParty)
+                                                                                                && finalAmount.compareTo(o.payload.getAmount) == 0)
+                                                                                        .map(o -> o.contractId.getContractId)
+                                                                                        .findFirst().orElse(""));
                                                                         logger.info("[createLoanOffer] resolved contractId={}", cid);
                                                                         org.openapitools.model.LoanOffer body = new org.openapitools.model.LoanOffer();
                                                                         body.setContractId(cid);
@@ -263,6 +275,7 @@ public class LoanApiImpl implements LoansApi {
                                                                         body.setBorrower(borrowerPartyForLender);
                                                                         body.setAmount(finalAmount);
                                                                         body.setInterestRate(rate);
+                                                                        body.setDurationDays((int) durationDays);
                                                                         body.setCreatedAt(toOffsetDateTime(now));
                                                                         return ResponseEntity.status(HttpStatus.CREATED).body(body);
                                                                     }));
@@ -302,11 +315,15 @@ public class LoanApiImpl implements LoansApi {
                                                         ? loanOfferCreate.getAmount() : req.payload.getAmount;
                                                 BigDecimal rate = loanOfferCreate.getInterestRate() != null && loanOfferCreate.getInterestRate().compareTo(BigDecimal.ZERO) > 0
                                                         ? loanOfferCreate.getInterestRate() : req.payload.getInterestRate;
+                                                long durationDaysFallback = (loanOfferCreate.getDurationDays() != null && loanOfferCreate.getDurationDays() > 0)
+                                                        ? loanOfferCreate.getDurationDays().longValue()
+                                                        : (req.payload.getDurationDays != null ? req.payload.getDurationDays : 360L);
                                                 LoanOffer template = new LoanOffer(
                                                         new Party(party),
                                                         req.payload.getBorrower,
                                                         amount,
                                                         rate,
+                                                        durationDaysFallback,
                                                         now,
                                                         req.contractId);
                                                 String fallbackCmdId = commandId != null ? commandId : UUID.randomUUID().toString();
@@ -333,6 +350,7 @@ public class LoanApiImpl implements LoansApi {
                                                                                 body.setBorrower(borrowerPartyFallback);
                                                                                 body.setAmount(finalAmountFallback);
                                                                                 body.setInterestRate(rate);
+                                                                                body.setDurationDays((int) durationDaysFallback);
                                                                                 body.setCreatedAt(toOffsetDateTime(now));
                                                                                 return ResponseEntity.status(HttpStatus.CREATED).body(body);
                                                                             }));
@@ -802,6 +820,9 @@ public class LoanApiImpl implements LoansApi {
         api.setBorrower(p.getBorrower.getParty);
         api.setAmount(p.getAmount);
         api.setInterestRate(p.getInterestRate);
+        if (p.getDurationDays != null) {
+            api.setDurationDays(p.getDurationDays.intValue());
+        }
         api.setCreatedAt(toOffsetDateTime(p.getCreatedAt));
         return api;
     }

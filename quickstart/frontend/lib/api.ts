@@ -126,7 +126,7 @@ function mapLoanOffer(o: ApiLoanOffer): LoanOffer {
     loanRequestId: o.loanRequestId || "",
     amount: o.amount,
     interestRate: o.interestRate,
-    duration: 0, // not in API; could derive from request
+    duration: o.durationDays != null ? daysToMonths(o.durationDays) : 0,
     status: "pending",
     createdAt: o.createdAt,
   }
@@ -251,16 +251,18 @@ export async function createLoanRequest(payload: {
   return mapLoanRequest(raw, 0)
 }
 
-/** Create a loan offer (lender). */
+/** Create a loan offer (lender). Amount, interest rate, and duration (term) are the three parameters. */
 export async function createLoanOffer(payload: {
   loanRequestId: string
   amount: number
   interestRate: number
+  duration: number
 }): Promise<LoanOffer> {
   const body: LoanOfferCreate = {
     loanRequestId: payload.loanRequestId,
     amount: payload.amount,
     interestRate: payload.interestRate,
+    durationDays: monthsToDays(payload.duration),
   }
   const raw = await postApi<ApiLoanOffer>("/loans/offer?commandId=" + encodeURIComponent(commandId()), body)
   return mapLoanOffer(raw)

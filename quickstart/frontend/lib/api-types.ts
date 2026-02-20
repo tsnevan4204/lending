@@ -19,6 +19,7 @@ export interface ApiLoanOffer {
   borrower: string
   amount: number
   interestRate: number
+  durationDays?: number
   createdAt: string
 }
 
@@ -56,6 +57,7 @@ export interface LoanOfferCreate {
   loanRequestId: string
   amount: number
   interestRate: number
+  durationDays?: number
 }
 
 export interface LoanFundRequest {

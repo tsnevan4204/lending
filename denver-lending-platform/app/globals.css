@@ -1,0 +1,140 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Robinhood-inspired — white & green */
+  --background: #ffffff;
+  --foreground: #1b1b1b;
+  --card: #ffffff;
+  --card-foreground: #1b1b1b;
+  --popover: #ffffff;
+  --popover-foreground: #1b1b1b;
+  --primary: #00C805;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #1b1b1b;
+  --muted: #f5f5f5;
+  --muted-foreground: #6f7177;
+  --accent: #f0f0f0;
+  --accent-foreground: #1b1b1b;
+  --destructive: #ff5000;
+  --destructive-foreground: #ffffff;
+  --border: #e8e8e8;
+  --input: #f5f5f5;
+  --ring: #00C805;
+  --chart-1: #00C805;
+  --chart-2: #5ac53a;
+  --chart-3: #ff5000;
+  --chart-4: #ffb700;
+  --chart-5: #6f7177;
+  --radius: 0.5rem;
+  --sidebar: #fafafa;
+  --sidebar-foreground: #1b1b1b;
+  --sidebar-primary: #00C805;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0f0f0;
+  --sidebar-accent-foreground: #1b1b1b;
+  --sidebar-border: #e8e8e8;
+  --sidebar-ring: #00C805;
+
+  /* Custom tokens */
+  --success: #00C805;
+  --success-foreground: #ffffff;
+  --warning: #ffb700;
+  --warning-foreground: #1b1b1b;
+}
+
+.dark {
+  --background: #0d0d0d;
+  --foreground: #f5f5f5;
+  --card: #141414;
+  --card-foreground: #f5f5f5;
+  --popover: #141414;
+  --popover-foreground: #f5f5f5;
+  --primary: #00C805;
+  --primary-foreground: #0d0d0d;
+  --secondary: #1c1c1c;
+  --secondary-foreground: #f5f5f5;
+  --muted: #1c1c1c;
+  --muted-foreground: #8e8e93;
+  --accent: #222222;
+  --accent-foreground: #f5f5f5;
+  --destructive: #ff453a;
+  --destructive-foreground: #f5f5f5;
+  --border: #2c2c2e;
+  --input: #1c1c1c;
+  --ring: #00C805;
+  --chart-1: #00C805;
+  --chart-2: #5ac53a;
+  --chart-3: #ff453a;
+  --chart-4: #ffd60a;
+  --chart-5: #8e8e93;
+  --sidebar: #0a0a0a;
+  --sidebar-foreground: #f5f5f5;
+  --sidebar-primary: #00C805;
+  --sidebar-primary-foreground: #0d0d0d;
+  --sidebar-accent: #1c1c1c;
+  --sidebar-accent-foreground: #f5f5f5;
+  --sidebar-border: #2c2c2e;
+  --sidebar-ring: #00C805;
+  --success: #00C805;
+  --success-foreground: #0d0d0d;
+  --warning: #ffd60a;
+  --warning-foreground: #0d0d0d;
+}
+
+@theme inline {
+  --font-sans: 'Inter', 'Inter Fallback';
+  --font-mono: 'JetBrains Mono', 'JetBrains Mono Fallback';
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

@@ -61,7 +61,7 @@ function MakeOfferForm({
 }: {
   request: LoanRequest
   onClose: () => void
-  onSubmit?: (payload: { loanRequestId: string; amount: number; interestRate: number }) => Promise<void>
+  onSubmit?: (payload: { loanRequestId: string; amount: number; interestRate: number; duration: number }) => Promise<void>
 }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -72,11 +72,13 @@ function MakeOfferForm({
     const form = e.currentTarget
     const amount = Number((form.querySelector("#offer-amount") as HTMLInputElement)?.value) || 0
     const interestRate = Number((form.querySelector("#offer-rate") as HTMLInputElement)?.value) || 0
+    const duration = Number((form.querySelector("#offer-duration") as HTMLInputElement)?.value) || 0
     if (amount <= 0) { setError("Amount must be greater than 0"); return }
     if (interestRate <= 0 || interestRate > 100) { setError("Interest rate must be between 0 and 100"); return }
+    if (duration <= 0 || duration > 120) { setError("Duration must be between 1 and 120 months"); return }
     setLoading(true)
     try {
-      if (onSubmit) await onSubmit({ loanRequestId: request.contractId, amount, interestRate })
+      if (onSubmit) await onSubmit({ loanRequestId: request.contractId, amount, interestRate, duration })
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit")
@@ -92,12 +94,16 @@ function MakeOfferForm({
         <p>Requested: {formatCurrency(request.amount)} at {request.interestRate}% for {request.duration}mo</p>
       </div>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="offer-amount" className="text-sm text-foreground">Your Offer Amount</Label>
+        <Label htmlFor="offer-amount" className="text-sm text-foreground">Loan Amount (USD)</Label>
         <Input id="offer-amount" type="number" defaultValue={request.amount} required />
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="offer-rate" className="text-sm text-foreground">Interest Rate (%)</Label>
         <Input id="offer-rate" type="number" step="0.1" defaultValue={request.interestRate} required />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="offer-duration" className="text-sm text-foreground">Length of Loan (months)</Label>
+        <Input id="offer-duration" type="number" min={1} max={120} defaultValue={request.duration} required />
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <Button type="submit" className="w-full mt-2 bg-primary text-primary-foreground hover:bg-primary/90" disabled={loading}>
@@ -179,7 +185,7 @@ export function LenderDashboard({
   loans: ActiveLoan[]
   bids: LenderBid[]
   currentParty?: string
-  onMakeOffer?: (payload: { loanRequestId: string; amount: number; interestRate: number }) => Promise<void>
+  onMakeOffer?: (payload: { loanRequestId: string; amount: number; interestRate: number; duration: number }) => Promise<void>
   onMarkDefault?: (loanContractId: string) => Promise<void>
   onPlaceBid?: (payload: { amount: number; minInterestRate: number; maxDuration: number }) => Promise<void>
   onCancelBid?: (contractId: string) => Promise<void>

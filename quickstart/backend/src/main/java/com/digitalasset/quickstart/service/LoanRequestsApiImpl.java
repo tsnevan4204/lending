@@ -62,7 +62,9 @@ public class LoanRequestsApiImpl implements LoanRequestsApi {
             logger.info("[listLoanRequests] party={} appProviderPartyId={}", party, appProviderPartyId);
             return traceServiceCallAsync(ctx, () ->
                     damlRepository.findActiveLoanRequestsByBorrower(party)
-                            .thenCompose(borrowerRequests -> {
+                            .thenCompose(borrowerRequests ->
+                    damlRepository.findActiveLoanRequestForLenderByBorrower(party)
+                            .thenCompose(ownDisclosedRequests -> {
                                 List<LoanRequest> result = new ArrayList<>(
                                         borrowerRequests.stream()
                                                 .map(LoanRequestsApiImpl::toLoanRequestApi)
@@ -71,6 +73,14 @@ public class LoanRequestsApiImpl implements LoanRequestsApi {
                                         borrowerRequests.stream()
                                                 .map(c -> c.contractId.getContractId)
                                                 .collect(Collectors.toSet()));
+                                // LoanRequest_DiscloseToLender is consuming in the deployed DAML, so the
+                                // original LoanRequest is archived after disclosure and replaced with a
+                                // LoanRequestForLender. Recover the borrower's own requests from there.
+                                for (var c : ownDisclosedRequests) {
+                                    if (seenIds.add(c.contractId.getContractId)) {
+                                        result.add(toLoanRequestApiFromForLender(c));
+                                    }
+                                }
                                 // If not platform, ensure we disclose platform requests to this party (lender marketplace)
                                 if (!party.equals(appProviderPartyId)) {
                                     return damlRepository.findActiveLoanRequestsByPlatform(appProviderPartyId)
@@ -128,7 +138,7 @@ public class LoanRequestsApiImpl implements LoanRequestsApi {
                                             logger.info("[listLoanRequests] party={} (platform/lender) returning {} request(s)", party, result.size());
                                             return ResponseEntity.ok(result);
                                         });
-                            }));
+                            })));
         });
     }
 

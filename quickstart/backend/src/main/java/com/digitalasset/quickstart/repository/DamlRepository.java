@@ -319,6 +319,18 @@ public class DamlRepository {
     }
 
     /**
+     * Returns LoanRequestForLender contracts where this party is the borrower.
+     * Used to recover the borrower's own requests after LoanRequest_DiscloseToLender
+     * archives the original LoanRequest and replaces it with a LoanRequestForLender.
+     */
+    public CompletableFuture<List<Contract<LoanRequestForLender>>> findActiveLoanRequestForLenderByBorrower(String borrowerParty) {
+        return pqs.activeWhere(LoanRequestForLender.class,
+                "(payload->>'borrower' = ? OR payload->'borrower'->>'party' = ?)",
+                borrowerParty, borrowerParty)
+                .exceptionally(ex -> handlePqsTemplateNotFound(ex, "LoanRequestForLender"));
+    }
+
+    /**
      * Find LoanRequestForLender by contract ID (what the lender UI sends).
      * The lender sees LoanRequestForLender contracts, not LoanRequest directly.
      */

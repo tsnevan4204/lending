@@ -172,7 +172,7 @@ export function useDenverData(role: "borrower" | "lender") {
   )
 
   const createLoanOffer = useCallback(
-    async (payload: { loanRequestId: string; amount: number; interestRate: number }) => {
+    async (payload: { loanRequestId: string; amount: number; interestRate: number; duration: number }) => {
       setError(null)
       try {
         await apiCreateLoanOffer(payload)
