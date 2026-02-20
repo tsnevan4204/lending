@@ -54,7 +54,7 @@ const LoanFundView: React.FC = () => {
     return (
         <div>
             <h2>Fund loan (accept offer)</h2>
-            <p className="text-muted">Accepting a loan is just: offer contract ID + your credit profile contract ID. The backend creates the loan on-chain. You must be logged in as the <strong>borrower</strong> (app-user), not app-provider or lender. Actual money movement (lender pays borrower, or borrower repays) would be wired separately (e.g. bank transfer or stablecoin) when the loan is created or when the borrower repays.</p>
+            <p className="text-muted">Accept a loan offer by providing the offer contract ID and your credit profile contract ID.</p>
             <form onSubmit={handleSubmit} className="card p-4">
                 <div className="mb-3">
                     <label htmlFor="loan-fund-offer-id" className="form-label">Loan offer contract ID</label>

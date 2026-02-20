@@ -53,8 +53,7 @@ const LoginView: React.FC = () => {
                         ))}
                     </tbody>
                 </table>
-                <div>AppProvider user: app-provider, password: abc123</div>
-                <div>AppUser user: app-user, password: abc123</div>
+                <p className="text-muted mt-3">Select a login option above to sign in.</p>
             </div>
         ) : (
             <div className="login-container">
@@ -67,9 +66,7 @@ const LoginView: React.FC = () => {
                         <button type="submit" name="submit" className="form-button">Sign in</button>
                     </div>
                 </form>
-                <div>AppProvider: app-provider</div>
-                <div>AppUser (borrower): app-user</div>
-                <div>Lender: lender</div>
+                <p className="text-muted mt-3">Enter your username to sign in.</p>
             </div>
 
         )

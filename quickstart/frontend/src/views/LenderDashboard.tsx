@@ -11,7 +11,6 @@ const LenderDashboard: React.FC = () => {
     const { user } = useUserStore();
     const { loans, loanOffers, loanRequests, fetchLoans, fetchLoanOffers, fetchLoanRequests } = useLoanStore();
     const currentParty = user?.party ?? '';
-    const isLender = currentParty && !currentParty.includes('app_user') && !currentParty.includes('app-user');
 
     useEffect(() => {
         fetchLoans();
@@ -48,25 +47,12 @@ const LenderDashboard: React.FC = () => {
     return (
         <div>
             <h2>Lender Dashboard</h2>
-            <p className="text-muted">
-                Log in as user <strong>lender</strong> (shared-secret) to act as the lender party. Browse loan requests below and make offers to fund borrowers.
-            </p>
-            {currentParty && (
-                <p className="small text-secondary mb-2">
-                    Logged in as: <strong>{currentParty}</strong>.
-                    {!isLender && ' To make offers you must be the lender party. Log out, then on the Login page enter user lender (not app-user) and Sign in.'}
-                </p>
-            )}
-            {currentParty && !isLender && (
-                <div className="alert alert-warning mb-3" role="alert">
-                    <strong>You are not logged in as the lender.</strong> Making an offer will fail with PERMISSION_DENIED. Use <strong>Logout</strong> in the top navigation, then on the <Link to="/login" className="alert-link">Login</Link> page enter user <strong>lender</strong> and click Sign in (do not use app-user).
-                </div>
-            )}
+            <p className="text-muted">Browse loan requests below and make offers to fund borrowers.</p>
             <section className="card mb-4">
                 <h3>Loan requests to fund</h3>
-                <p className="text-muted small mb-2">These are live loan requests from the ledger (created by borrowers and disclosed to you). Each row is an on-chain contract.</p>
+                <p className="text-muted small mb-2">Live loan requests from borrowers disclosed to you. Each row is an on-chain contract.</p>
                 {requestsToFund.length === 0 ? (
-                    <p>No loan requests yet. When borrowers request loans, they appear here so you can make offers. Make sure you are logged in as user <strong>lender</strong> (not as app-user or app-provider).</p>
+                    <p>No loan requests available. When borrowers request loans, they will appear here.</p>
                 ) : (
                     <ul className="list-group">
                         {requestsToFund.map((req) => (
@@ -79,9 +65,9 @@ const LenderDashboard: React.FC = () => {
                 )}
             </section>
             <section className="card mb-4">
-                <h3>Offers you made (as lender)</h3>
+                <h3>Offers you made</h3>
                 {offersIMade.length === 0 ? (
-                    <p>No offers yet. Create an offer from a loan request (you need the request contract ID from the borrower flow).</p>
+                    <p>No offers yet.</p>
                 ) : (
                     <ul className="list-group">
                         {offersIMade.map((offer) => (
@@ -94,7 +80,7 @@ const LenderDashboard: React.FC = () => {
             </section>
             {offersToMe.length > 0 && (
                 <section className="card mb-4">
-                    <h3>Offers made to you (as borrower)</h3>
+                    <h3>Offers made to you</h3>
                     <ul className="list-group">
                         {offersToMe.map((offer) => (
                             <li key={offer.contractId} className="list-group-item d-flex justify-content-between align-items-center">
@@ -119,9 +105,6 @@ const LenderDashboard: React.FC = () => {
                     </ul>
                 )}
             </section>
-            <p>
-                <Link to="/loans/fund" className="btn btn-primary">Fund Loan (by offer ID)</Link>
-            </p>
         </div>
     );
 };

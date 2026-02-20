@@ -11,7 +11,7 @@ const Header: React.FC = () => {
             <nav className="navbar navbar-expand-lg navbar-light bg-light">
                 <div className="container-fluid">
                     <a className="navbar-brand" href="#">
-                        Canton Network Quickstart
+                        Denver Lending
                     </a>
                     <div>
                         <button
@@ -55,22 +55,11 @@ const AuthenticatedLinks: React.FC = () => {
                 <Link className="nav-link" to="/">Home</Link>
             </li>
             <li className="nav-item">
-                <Link className="nav-link" to="/app-installs">AppInstalls</Link>
-            </li>
-            <li className="nav-item">
-                <Link className="nav-link" to="/licenses">Licenses</Link>
-            </li>
-            <li className="nav-item">
                 <Link className="nav-link" to="/borrower">Borrower</Link>
             </li>
             <li className="nav-item">
                 <Link className="nav-link" to="/lender">Lender</Link>
             </li>
-            {user.isAdmin && (
-                <li className="nav-item">
-                    <Link className="nav-link" to="/tenants">Tenants</Link>
-                </li>
-            )}
         </ul>
     );
 };

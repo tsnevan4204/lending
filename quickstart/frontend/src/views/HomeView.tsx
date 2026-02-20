@@ -21,7 +21,8 @@ const HomeView: React.FC = () => {
 
     return (
         <main>
-            <h1>Home</h1>
+            <h1>Denver Lending</h1>
+            <p className="text-muted">Welcome to the decentralized microlending platform. Use the navigation above to access the Borrower or Lender dashboard.</p>
         </main>
     );
 };

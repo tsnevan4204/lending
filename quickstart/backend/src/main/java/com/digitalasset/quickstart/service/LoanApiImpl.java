@@ -11,6 +11,7 @@ import static com.digitalasset.quickstart.utility.Utils.toOffsetDateTime;
 import com.digitalasset.quickstart.api.LoansApi;
 import com.digitalasset.quickstart.ledger.LedgerApi;
 import com.digitalasset.quickstart.repository.DamlRepository;
+import com.digitalasset.quickstart.repository.TenantPropertiesRepository;
 import com.digitalasset.quickstart.security.AuthUtils;
 import com.digitalasset.transcode.java.ContractId;
 import com.digitalasset.transcode.java.Party;
@@ -52,11 +53,58 @@ public class LoanApiImpl implements LoansApi {
     private final LedgerApi ledger;
     private final DamlRepository damlRepository;
     private final AuthUtils auth;
+    private final TenantPropertiesRepository tenantPropertiesRepository;
 
-    public LoanApiImpl(LedgerApi ledger, DamlRepository damlRepository, AuthUtils auth) {
+    public LoanApiImpl(LedgerApi ledger, DamlRepository damlRepository, AuthUtils auth,
+                       TenantPropertiesRepository tenantPropertiesRepository) {
         this.ledger = ledger;
         this.damlRepository = damlRepository;
         this.auth = auth;
+        this.tenantPropertiesRepository = tenantPropertiesRepository;
+    }
+
+    /**
+     * Proactively disclose all undisclosed LoanRequests to every known lender party.
+     * Runs asynchronously after a short delay to allow PQS indexing.
+     */
+    private void discloseToAllLenders(String borrowerParty, String appProviderPartyId) {
+        CompletableFuture.delayedExecutor(2, java.util.concurrent.TimeUnit.SECONDS)
+            .execute(() -> {
+                try {
+                    damlRepository.findActiveLoanRequestsByPlatform(appProviderPartyId)
+                        .thenAccept(requests -> {
+                            List<String> lenderParties = tenantPropertiesRepository.getAllTenants().values().stream()
+                                .map(TenantPropertiesRepository.TenantProperties::getPartyId)
+                                .filter(pid -> pid != null && !pid.isEmpty())
+                                .filter(pid -> !pid.equals(appProviderPartyId))
+                                .filter(pid -> !pid.equals(borrowerParty))
+                                .toList();
+
+                            for (var req : requests) {
+                                for (String lenderParty : lenderParties) {
+                                    var choice = new LoanRequest.LoanRequest_DiscloseToLender(new Party(lenderParty));
+                                    ledger.exerciseAndGetResult(
+                                        req.contractId, choice,
+                                        UUID.randomUUID().toString(),
+                                        appProviderPartyId)
+                                    .exceptionally(ex -> {
+                                        logger.debug("[discloseToAllLenders] skipped lender={} request={}: {}",
+                                            lenderParty, req.contractId.getContractId, ex.getMessage());
+                                        return null;
+                                    });
+                                }
+                            }
+                            logger.info("[discloseToAllLenders] disclosed {} request(s) to {} lender(s)",
+                                requests.size(), lenderParties.size());
+                        })
+                        .exceptionally(ex -> {
+                            logger.warn("[discloseToAllLenders] failed to query platform requests", ex);
+                            return null;
+                        });
+                } catch (Exception ex) {
+                    logger.warn("[discloseToAllLenders] unexpected error", ex);
+                }
+            });
     }
 
     @Override
@@ -90,6 +138,8 @@ public class LoanApiImpl implements LoansApi {
                     return ledger.create(template, commandId != null ? commandId : UUID.randomUUID().toString(), party)
                             .thenApply(v -> {
                                 logger.info("[createLoanRequest] SUCCESS party={} amount={} rate={} days={}", party, amount, rate, daysInt);
+                                // Proactively disclose to all known lenders
+                                discloseToAllLenders(party, auth.getAppProviderPartyId());
                                 org.openapitools.model.LoanRequest body = new org.openapitools.model.LoanRequest();
                                 body.setContractId("");
                                 body.setBorrower(party);

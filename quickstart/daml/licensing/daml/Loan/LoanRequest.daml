@@ -26,7 +26,7 @@ template LoanRequest with
       do pure ()
 
     -- | Platform discloses this request to a lender so they can make an offer.
-    choice LoanRequest_DiscloseToLender : ContractId LoanRequestForLender
+    nonconsuming choice LoanRequest_DiscloseToLender : ContractId LoanRequestForLender
       with lender : Party
       controller platformOperator
       do
