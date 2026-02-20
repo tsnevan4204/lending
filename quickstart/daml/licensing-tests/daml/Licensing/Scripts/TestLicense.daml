@@ -3,6 +3,7 @@ module Licensing.Scripts.TestLicense where
 import Daml.Script
 
 import DA.Assert
+import DA.List (head)
 import DA.Time
 import DA.Foldable (forA_)
 import DA.Optional (isNone)

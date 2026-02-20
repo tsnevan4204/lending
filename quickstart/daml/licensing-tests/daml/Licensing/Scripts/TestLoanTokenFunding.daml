@@ -69,6 +69,7 @@ setupLoanFundingTest = script do
     loanRequestId = loanRequestCid
     amount = 100.0
     interestRate = 5.0
+    durationDays = 30
     createdAt = now
 
   pure (registry, lender, borrower, creditProfileCid, loanRequestCid, loanOfferCid)

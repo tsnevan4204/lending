@@ -976,6 +976,62 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /orderbook:
+    get:
+      tags: [Market]
+      summary: Aggregated order book depth (public, no private party IDs)
+      operationId: getOrderBook
+      responses:
+        '200':
+          description: Aggregated order book
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderBookResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /market/matched-deals:
+    get:
+      tags: [Market]
+      summary: List matched deals visible to the authenticated party
+      operationId: listMatchedDeals
+      responses:
+        '200':
+          description: A list of matched deals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MatchedDealResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /market/matched-deals/{contractId}:accept:
+    post:
+      tags: [Market]
+      summary: Accept a matched deal (borrower or lender)
+      operationId: acceptMatchedDeal
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '200':
+          description: Deal accepted (may or may not have finalized into Loan)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchedDealAcceptResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   parameters:
     ContractId:
@@ -1813,3 +1869,66 @@ components:
           type: integer
         message:
           type: string
+
+    OrderBookTier:
+      type: object
+      required: [ interestRate, duration, totalAmount, orderCount ]
+      properties:
+        interestRate:
+          type: number
+        duration:
+          type: integer
+        totalAmount:
+          type: number
+        orderCount:
+          type: integer
+
+    OrderBookResponse:
+      type: object
+      required: [ asks, bids, spread ]
+      properties:
+        asks:
+          type: array
+          description: Lend orders (supply) grouped by rate+duration, sorted ascending by rate
+          items:
+            $ref: '#/components/schemas/OrderBookTier'
+        bids:
+          type: array
+          description: Borrow orders (demand) grouped by rate+duration, sorted descending by rate
+          items:
+            $ref: '#/components/schemas/OrderBookTier'
+        spread:
+          type: number
+          nullable: true
+          description: Gap between lowest ask rate and highest bid rate (null if either side is empty)
+
+    MatchedDealResponse:
+      type: object
+      required: [ contractId, principal, interestRate, durationDays, matchedAt, borrowerAccepted, lenderAccepted ]
+      properties:
+        contractId:
+          type: string
+        principal:
+          type: number
+        interestRate:
+          type: number
+        durationDays:
+          type: integer
+        matchedAt:
+          type: string
+          format: date-time
+        borrowerAccepted:
+          type: boolean
+        lenderAccepted:
+          type: boolean
+
+    MatchedDealAcceptResult:
+      type: object
+      properties:
+        accepted:
+          type: boolean
+        loanCreated:
+          type: boolean
+        loanContractId:
+          type: string
+          nullable: true

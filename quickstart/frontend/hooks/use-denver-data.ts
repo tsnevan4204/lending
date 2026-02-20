@@ -22,6 +22,9 @@ import {
   listLenderBids,
   listBorrowerAsks,
   getPlatformStats,
+  getOrderBook,
+  listMatchedDeals,
+  acceptMatchedDeal,
   createLoanRequest as apiCreateLoanRequest,
   createLoanOffer as apiCreateLoanOffer,
   fundLoan as apiFundLoan,
@@ -32,6 +35,7 @@ import {
   cancelLenderBid as apiCancelLenderBid,
   cancelBorrowerAsk as apiCancelBorrowerAsk,
 } from "@/lib/api"
+import type { ApiOrderBookResponse } from "@/lib/api-types"
 import {
   mockLoanRequests,
   mockLoanOffers,
@@ -57,8 +61,12 @@ export function useDenverData(role: "borrower" | "lender") {
   const [bids, setBids] = useState<LenderBid[]>(mockLenderBids)
   const [asks, setAsks] = useState<BorrowerAsk[]>(mockBorrowerAsks)
   const [platformStats, setPlatformStats] = useState(mockPlatformStats)
+  const [orderBook, setOrderBook] = useState<ApiOrderBookResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Track which MatchedDeal contractIds we've already auto-accepted
+  const [autoAcceptedDeals, setAutoAcceptedDeals] = useState<Set<string>>(new Set())
 
   const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
@@ -66,7 +74,7 @@ export function useDenverData(role: "borrower" | "lender") {
     setLoading(true)
     setError(null)
     try {
-      const [reqs, offs, lns, profile, bidList, askList, stats] = await Promise.all([
+      const [reqs, offs, lns, profile, bidList, askList, stats, ob] = await Promise.all([
         listLoanRequests(),
         listLoanOffers(),
         listLoans(),
@@ -74,6 +82,7 @@ export function useDenverData(role: "borrower" | "lender") {
         listLenderBids(),
         listBorrowerAsks(),
         getPlatformStats(),
+        getOrderBook(),
       ])
       // Enrich offers with duration from their linked requests
       const reqById = new Map(reqs.map((r) => [r.id, r]))
@@ -89,6 +98,7 @@ export function useDenverData(role: "borrower" | "lender") {
       setBids(bidList.length > 0 ? bidList : mockLenderBids)
       setAsks(askList.length > 0 ? askList : mockBorrowerAsks)
       if (stats) setPlatformStats(stats)
+      if (ob) setOrderBook(ob)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load data")
     } finally {
@@ -125,6 +135,45 @@ export function useDenverData(role: "borrower" | "lender") {
       loadRealData()
     }
   }, [authStatus, loadRealData])
+
+  // Auto-accept MatchedDeal contracts where the logged-in user is an observer.
+  // Polls every 3 seconds for new deals and automatically submits Accept.
+  useEffect(() => {
+    if (authStatus !== "authenticated") return
+    let cancelled = false
+
+    const pollAndAutoAccept = async () => {
+      try {
+        const deals = await listMatchedDeals()
+        for (const deal of deals) {
+          if (cancelled) break
+          // Skip deals we've already auto-accepted
+          if (autoAcceptedDeals.has(deal.contractId)) continue
+          // Only auto-accept if the user hasn't already accepted their side
+          // The backend determines which choice to exercise based on party
+          if (deal.borrowerAccepted && deal.lenderAccepted) continue
+          try {
+            await acceptMatchedDeal(deal.contractId)
+            setAutoAcceptedDeals(prev => new Set(prev).add(deal.contractId))
+          } catch {
+            // Silently ignore — may already be archived or accepted
+          }
+        }
+        if (!cancelled) {
+          await sleep(1000)
+          await loadRealData()
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }
+
+    const interval = setInterval(pollAndAutoAccept, 3000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [authStatus, autoAcceptedDeals, loadRealData])
 
   const login = useCallback(
     async (username: string, password = ""): Promise<boolean> => {
@@ -304,6 +353,7 @@ export function useDenverData(role: "borrower" | "lender") {
     bids,
     asks,
     platformStats,
+    orderBook,
     loading,
     error,
     clearError: () => setError(null),

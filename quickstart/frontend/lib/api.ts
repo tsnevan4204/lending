@@ -24,6 +24,11 @@ import type {
   LoanFundRequest,
   LenderBidCreate,
   BorrowerAskCreate,
+  ApiOrderBookResponse,
+  ApiMatchedDeal,
+  ApiMatchedDealAcceptResult,
+  BorrowOrderCreate,
+  LendOrderCreate,
 } from "@/lib/api-types"
 
 const API_BASE = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "/api") : ""
@@ -404,4 +409,70 @@ export async function getPlatformStats(): Promise<{
   } catch {
     return null
   }
+}
+
+// --- Order Book (Decentralized Matching Engine) ---
+
+/** Fetch the aggregated order book (public endpoint, no auth required). */
+export async function getOrderBook(): Promise<ApiOrderBookResponse | null> {
+  try {
+    return await fetchApi<ApiOrderBookResponse>("/orderbook")
+  } catch {
+    return null
+  }
+}
+
+/** List matched deals visible to the authenticated party. */
+export async function listMatchedDeals(): Promise<ApiMatchedDeal[]> {
+  try {
+    const raw = await fetchApi<ApiMatchedDeal[]>("/market/matched-deals")
+    return raw || []
+  } catch {
+    return []
+  }
+}
+
+/** Accept a matched deal (borrower or lender). */
+export async function acceptMatchedDeal(contractId: string): Promise<ApiMatchedDealAcceptResult> {
+  return postApi<ApiMatchedDealAcceptResult>(
+    `/market/matched-deals/${encodeURIComponent(contractId)}:accept?commandId=${encodeURIComponent(commandId())}`
+  )
+}
+
+/** Submit a BorrowOrder to the order book. Uses the existing borrower-ask endpoint. */
+export async function createBorrowOrder(payload: {
+  amount: number
+  maxInterestRate: number
+  duration: number
+  purpose: string
+  creditProfileId: string
+}): Promise<void> {
+  const body: BorrowOrderCreate = {
+    amount: payload.amount,
+    maxInterestRate: payload.maxInterestRate,
+    duration: payload.duration,
+    purpose: payload.purpose,
+    creditProfileId: payload.creditProfileId,
+  }
+  await postApi(
+    "/market/borrower-asks?commandId=" + encodeURIComponent(commandId()),
+    body
+  )
+}
+
+/** Submit a LendOrder to the order book. Uses the existing lender-bid endpoint. */
+export async function createLendOrder(payload: {
+  amount: number
+  minInterestRate: number
+  duration: number
+}): Promise<void> {
+  const body: LendOrderCreate = {
+    amount: payload.amount,
+    minInterestRate: payload.minInterestRate,
+    duration: payload.duration,
+  }
+  await postApi(
+    "/market/lender-bids?commandId=" + encodeURIComponent(commandId()),
+    body
+  )
 }

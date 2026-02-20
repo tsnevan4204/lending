@@ -9,6 +9,7 @@ import { OverviewDashboard } from "@/components/denver/overview-dashboard"
 import { BorrowerDashboard } from "@/components/denver/borrower-dashboard"
 import { LenderDashboard } from "@/components/denver/lender-dashboard"
 import { MarketDepth } from "@/components/denver/market-depth"
+import { OrderBook } from "@/components/denver/order-book"
 import { CreditScoreCard } from "@/components/denver/credit-score-card"
 import { PrivacyView } from "@/components/denver/privacy-view"
 import { useDenverData } from "@/hooks/use-denver-data"
@@ -30,6 +31,7 @@ export default function DenverLendingApp() {
     bids,
     asks,
     platformStats,
+    orderBook,
     loading,
     error,
     clearError,
@@ -208,7 +210,10 @@ export default function DenverLendingApp() {
             )}
 
             {activeView === "orderbook" && (
-              <MarketDepth bids={bids} asks={asks} />
+              <div className="flex flex-col gap-10">
+                <OrderBook orderBookData={orderBook} />
+                <MarketDepth bids={bids} asks={asks} />
+              </div>
             )}
 
             {activeView === "privacy" && <PrivacyView />}

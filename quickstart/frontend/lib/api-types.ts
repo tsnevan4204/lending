@@ -95,3 +95,48 @@ export interface BorrowerAskCreate {
   duration: number
   creditProfileId: string
 }
+
+// --- Order Book (Decentralized Matching Engine) ---
+
+export interface ApiOrderBookTier {
+  interestRate: number
+  duration: number
+  totalAmount: number
+  orderCount: number
+}
+
+export interface ApiOrderBookResponse {
+  asks: ApiOrderBookTier[]
+  bids: ApiOrderBookTier[]
+  spread: number | null
+}
+
+export interface ApiMatchedDeal {
+  contractId: string
+  principal: number
+  interestRate: number
+  durationDays: number
+  matchedAt: string
+  borrowerAccepted: boolean
+  lenderAccepted: boolean
+}
+
+export interface ApiMatchedDealAcceptResult {
+  accepted: boolean
+  loanCreated: boolean
+  loanContractId?: string
+}
+
+export interface BorrowOrderCreate {
+  amount: number
+  maxInterestRate: number
+  duration: number
+  purpose: string
+  creditProfileId: string
+}
+
+export interface LendOrderCreate {
+  amount: number
+  minInterestRate: number
+  duration: number
+}

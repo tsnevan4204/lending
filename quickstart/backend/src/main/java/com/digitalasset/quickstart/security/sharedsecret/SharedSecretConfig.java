@@ -67,7 +67,10 @@ public class SharedSecretConfig {
                             response.getWriter().write("Unauthorized" + authException.getMessage() + " " + authException.getCause());
 
                         })
-                ).formLogin(form -> form.loginPage("/login").permitAll())
+                ).formLogin(form -> form
+                        .loginPage("/login")
+                        .loginProcessingUrl("/login/shared-secret")
+                        .permitAll())
                 .logout(logout -> logout
                         .logoutUrl("/logout")
                         .invalidateHttpSession(true)

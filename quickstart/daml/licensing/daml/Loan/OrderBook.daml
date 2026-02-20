@@ -1,0 +1,131 @@
+-- Copyright (c) 2026, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: 0BSD
+--
+-- | Decentralized Matching Engine order book contracts.
+--   BorrowOrder / LendOrder replace the manual RFQ flow.
+--   The platform operator matches overlapping orders off-chain and creates
+--   a MatchedDeal that both parties must independently accept before the
+--   Loan is finalized (on-chain settlement).
+module Loan.OrderBook where
+
+import DA.Time (addRelTime, days)
+import Loan.LoanTypes (LoanStatus(Active))
+import Loan.CreditProfile
+import Loan.Loan
+import Licensing.Util as Util (require)
+
+-- | A borrower places a borrow order into the order book.
+--   Visible to the borrower (signatory) and platform operator (observer).
+--   Privacy: other borrowers and lenders cannot see this contract.
+template BorrowOrder with
+    borrower : Party
+    platformOperator : Party
+    amount : Decimal
+    maxInterestRate : Decimal
+    duration : Int
+    purpose : Text
+    creditProfileId : ContractId CreditProfile
+    createdAt : Time
+  where
+    signatory borrower
+    observer platformOperator
+
+    choice BorrowOrder_Cancel : ()
+      controller borrower
+      do pure ()
+
+    choice BorrowOrder_MatchConsume : ()
+      controller platformOperator
+      do pure ()
+
+-- | A lender places a lend order into the order book.
+--   Visible to the lender (signatory) and platform operator (observer).
+--   Privacy: other lenders and borrowers cannot see this contract.
+template LendOrder with
+    lender : Party
+    platformOperator : Party
+    amount : Decimal
+    minInterestRate : Decimal
+    duration : Int
+    createdAt : Time
+  where
+    signatory lender
+    observer platformOperator
+
+    choice LendOrder_Cancel : ()
+      controller lender
+      do pure ()
+
+    choice LendOrder_MatchConsume : ()
+      controller platformOperator
+      do pure ()
+
+-- | A matched deal created by the platform operator when a BorrowOrder and
+--   LendOrder overlap. Both borrower and lender must independently Accept.
+--   Once both have accepted, the active Loan contract is created.
+--
+--   Privacy: only the platform operator (signatory), borrower, and lender
+--   (observers) can see this contract. The borrower and lender learn each
+--   other's identity only after being matched.
+template MatchedDeal with
+    borrower : Party
+    lender : Party
+    platformOperator : Party
+    principal : Decimal
+    interestRate : Decimal
+    durationDays : Int
+    creditProfileId : ContractId CreditProfile
+    matchedAt : Time
+    borrowerAccepted : Bool
+    lenderAccepted : Bool
+  where
+    signatory platformOperator
+    observer borrower, lender
+
+    -- | Borrower accepts the matched deal.
+    choice MatchedDeal_BorrowerAccept : Either (ContractId MatchedDeal) (ContractId Loan)
+      controller borrower
+      do
+        require "Borrower has not already accepted" (not borrowerAccepted)
+        if lenderAccepted
+          then do
+            loan <- finalizeLoan this
+            return (Right loan)
+          else do
+            updated <- create this with borrowerAccepted = True
+            return (Left updated)
+
+    -- | Lender accepts the matched deal.
+    choice MatchedDeal_LenderAccept : Either (ContractId MatchedDeal) (ContractId Loan)
+      controller lender
+      do
+        require "Lender has not already accepted" (not lenderAccepted)
+        if borrowerAccepted
+          then do
+            loan <- finalizeLoan this
+            return (Right loan)
+          else do
+            updated <- create this with lenderAccepted = True
+            return (Left updated)
+
+    -- | Either party or the platform can reject the deal.
+    choice MatchedDeal_Reject : ()
+      controller borrower
+      do pure ()
+
+    choice MatchedDeal_Withdraw : ()
+      controller lender
+      do pure ()
+
+-- | Helper: create the Loan once both parties have accepted.
+finalizeLoan : MatchedDeal -> Update (ContractId Loan)
+finalizeLoan deal = do
+  let dueDate = addRelTime deal.matchedAt (days deal.durationDays)
+  create Loan with
+    lender = deal.lender
+    borrower = deal.borrower
+    principal = deal.principal
+    interestRate = deal.interestRate
+    dueDate
+    creditProfileId = deal.creditProfileId
+    status = Active
