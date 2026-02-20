@@ -30,6 +30,9 @@ export interface ApiLoan {
   interestRate: number
   dueDate: string
   status: "Active" | "Repaid" | "Defaulted"
+  durationDays?: number
+  purpose?: string
+  fundedAt?: string
 }
 
 export interface ApiCreditProfile {

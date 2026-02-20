@@ -4,7 +4,6 @@ import Daml.Script
 
 import DA.Assert
 import DA.Time
-import DA.List (sortOn, head)
 import DA.Foldable (forA_)
 import DA.Optional (isNone)
 
@@ -18,6 +17,8 @@ import Splice.Testing.Registries.AmuletRegistry qualified as AmuletRegistry
 import Splice.Testing.TokenStandard.RegistryApi qualified as RegistryApi
 import Splice.Testing.TokenStandard.WalletClient qualified as WalletClient
 import Splice.Testing.Utils
+
+import Licensing.Scripts.TestUtil (fetchAllocationsForRenewal)
 
 import Licensing.License
 import Licensing.AppInstall
@@ -519,18 +520,3 @@ testLicenseTokenStandard_ConcurrentRenewals = script do
   WalletClient.checkBalanceApprox providerParty instrumentId (renewalFee + renewalFee)
 
   pure ()
-
-
--------------------------------------------------------------------------------
--- Utility for matching allocations by 'Reference'
--------------------------------------------------------------------------------
-
-fetchAllocationsForRenewal : Party -> Reference -> Script (ContractId Allocation, AllocationView)
-fetchAllocationsForRenewal p ref = do
-  allocs <- queryInterface @Allocation p
-  let matchingAllocs = do
-        (cid, Some alloc) <- allocs
-        guard (alloc.allocation.settlement.settlementRef == ref)
-        pure (cid, alloc)
-  length matchingAllocs === 1        
-  pure $ head $ sortOn (\(_, alloc) -> alloc.allocation.settlement.settlementRef.id) matchingAllocs

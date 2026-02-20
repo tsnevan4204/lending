@@ -5,8 +5,6 @@ import Daml.Script
 import qualified DA.Map as Map
 import DA.Assert
 import DA.Time
-import DA.List (sortOn, head)
-
 import Splice.Api.Token.MetadataV1 as Api.Token.MetadataV1
 import Splice.Api.Token.AllocationV1
 import Splice.Api.Token.HoldingV1
@@ -17,6 +15,8 @@ import Splice.Testing.Registries.AmuletRegistry qualified as AmuletRegistry
 import Splice.Testing.TokenStandard.RegistryApi qualified as RegistryApi
 import Splice.Testing.TokenStandard.WalletClient qualified as WalletClient
 import Splice.Testing.Utils
+
+import Licensing.Scripts.TestUtil (fetchAllocationsForRenewal)
 
 import Loan.LoanRequest
 import Loan.LoanOffer
@@ -130,16 +130,3 @@ testLoanTokenFunding = script do
   loanForLender._2.principal === 100.0
   loanForLender._2.borrower === borrower
 
--------------------------------------------------------------------------------
--- Utility for matching allocations by 'Reference'
--------------------------------------------------------------------------------
-
-fetchAllocationsForRenewal : Party -> Reference -> Script (ContractId Allocation, AllocationView)
-fetchAllocationsForRenewal p ref = do
-  allocs <- queryInterface @Allocation p
-  let matchingAllocs = do
-        (cid, Some alloc) <- allocs
-        guard (alloc.allocation.settlement.settlementRef == ref)
-        pure (cid, alloc)
-  length matchingAllocs === 1
-  pure $ head $ sortOn (\(_, alloc) -> alloc.allocation.settlement.settlementRef.id) matchingAllocs

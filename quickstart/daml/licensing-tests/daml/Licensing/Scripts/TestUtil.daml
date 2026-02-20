@@ -1,0 +1,22 @@
+module Licensing.Scripts.TestUtil where
+
+import Daml.Script
+
+import DA.Assert
+import DA.List (sortOn, head)
+
+import Splice.Api.Token.AllocationV1
+
+-------------------------------------------------------------------------------
+-- Utility for matching allocations by 'Reference'
+-------------------------------------------------------------------------------
+
+fetchAllocationsForRenewal : Party -> Reference -> Script (ContractId Allocation, AllocationView)
+fetchAllocationsForRenewal p ref = do
+  allocs <- queryInterface @Allocation p
+  let matchingAllocs = do
+        (cid, Some alloc) <- allocs
+        guard (alloc.allocation.settlement.settlementRef == ref)
+        pure (cid, alloc)
+  length matchingAllocs === 1
+  pure $ head $ sortOn (\(_, alloc) -> alloc.allocation.settlement.settlementRef.id) matchingAllocs

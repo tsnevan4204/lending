@@ -75,8 +75,15 @@ export function useDenverData(role: "borrower" | "lender") {
         listBorrowerAsks(),
         getPlatformStats(),
       ])
+      // Enrich offers with duration from their linked requests
+      const reqById = new Map(reqs.map((r) => [r.id, r]))
+      const enrichedOffers = offs.map((o) => {
+        const req = reqById.get(o.loanRequestId)
+        return req ? { ...o, duration: req.duration } : o
+      })
+
       setRequests(reqs)
-      setOffers(offs)
+      setOffers(enrichedOffers)
       setLoans(lns)
       setCreditProfile(profile ?? mockCreditProfile)
       setBids(bidList.length > 0 ? bidList : mockLenderBids)
