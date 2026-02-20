@@ -1,0 +1,145 @@
+module Licensing.Scripts.TestLoanTokenFunding where
+
+import Daml.Script
+
+import qualified DA.Map as Map
+import DA.Assert
+import DA.Time
+import DA.List (sortOn, head)
+
+import Splice.Api.Token.MetadataV1 as Api.Token.MetadataV1
+import Splice.Api.Token.AllocationV1
+import Splice.Api.Token.HoldingV1
+import Splice.Api.Token.AllocationRequestV1
+import Splice.Api.Token.AllocationInstructionV1
+
+import Splice.Testing.Registries.AmuletRegistry qualified as AmuletRegistry
+import Splice.Testing.TokenStandard.RegistryApi qualified as RegistryApi
+import Splice.Testing.TokenStandard.WalletClient qualified as WalletClient
+import Splice.Testing.Utils
+
+import Loan.LoanRequest
+import Loan.LoanOffer
+import Loan.CreditProfile
+import Loan.Loan
+
+-- | Set up registry, parties, credit profile, loan request, and loan offer.
+setupLoanFundingTest
+  : Script
+      ( AmuletRegistry.AmuletRegistry
+      , Party
+      , Party
+      , ContractId CreditProfile
+      , ContractId LoanRequest
+      , ContractId LoanOffer
+      )
+setupLoanFundingTest = script do
+  registry <- AmuletRegistry.initialize AmuletRegistry.defaultAmuletRegistryConfig
+
+  lender <- allocatePartyExact "lender"
+  borrower <- allocatePartyExact "borrower"
+  platform <- allocatePartyExact "platform"
+
+  -- fund lender for token transfer
+  AmuletRegistry.tapLockedAndUnlockedFunds registry lender 1000.0
+
+  now <- getTime
+  creditProfileCid <- submit borrower $ createCmd CreditProfile with
+    borrower = borrower
+    creditScore = initialCreditScore
+    totalLoans = 0
+    successfulLoans = 0
+    defaultedLoans = 0
+    createdAt = now
+
+  -- borrower creates loan request (platform is observer only)
+  loanRequestCid <- submit borrower $ createCmd LoanRequest with
+    borrower = borrower
+    platformOperator = platform
+    amount = 100.0
+    interestRate = 5.0
+    durationDays = 30
+    purpose = "Token funding test"
+    createdAt = now
+
+  -- lender creates loan offer referencing request id
+  loanOfferCid <- submit lender $ createCmd LoanOffer with
+    lender = lender
+    borrower = borrower
+    loanRequestId = loanRequestCid
+    amount = 100.0
+    interestRate = 5.0
+    createdAt = now
+
+  pure (registry, lender, borrower, creditProfileCid, loanRequestCid, loanOfferCid)
+
+-- | Test token-based loan funding using AllocationRequest and Allocation.
+testLoanTokenFunding : Script ()
+testLoanTokenFunding = script do
+  (registry, lender, borrower, creditProfileCid, _loanRequestCid, loanOfferCid) <- setupLoanFundingTest
+
+  now <- getTime
+  let instrumentId = InstrumentId { admin = registry.dso, id = "Amulet" }
+
+  -- borrower creates funding intent
+  fundingIntentCid <- submit borrower $
+    exerciseCmd loanOfferCid LoanOffer_AcceptWithToken with
+      requestId = "loan-funding-1"
+      principalInstrumentId = instrumentId
+      prepareUntil = now `addRelTime` hours 1
+      settleBefore = now `addRelTime` hours 2
+      description = "Loan funding token flow"
+      creditProfileId = creditProfileCid
+
+  -- lender confirms intent and creates LoanPrincipalRequest
+  principalRequestCid <- submit lender $
+    exerciseCmd fundingIntentCid FundingIntent_ConfirmByLender
+
+  -- lender allocates via wallet
+  [lenderAlloc] <- WalletClient.listRequestedAllocations lender instrumentId
+  lenderAlloc.transferLeg.amount === 100.0
+  lenderHoldingCids <- WalletClient.listHoldingCids lender instrumentId
+
+  enrichedChoice <- RegistryApi.getAllocationFactory registry AllocationFactory_Allocate with
+    expectedAdmin = registry.dso
+    allocation = lenderAlloc
+    requestedAt = now
+    inputHoldingCids = lenderHoldingCids
+    extraArgs = emptyExtraArgs
+
+  submitWithDisclosures' lender enrichedChoice.disclosures $
+    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+  -- lender completes funding
+  Some principalRequest <- queryContractId lender principalRequestCid
+  let settlementRef = (view $ toInterface @AllocationRequest principalRequest).settlement.settlementRef
+  (allocCid, _) <- fetchAllocationsForRenewal lender settlementRef
+
+  context <- RegistryApi.getAllocation_TransferContext registry allocCid emptyMetadata
+  -- Lender and borrower both authorize (transfer is lender -> borrower; both needed for Allocation_ExecuteTransfer)
+  let Disclosures' ds = context.disclosures
+  submit (actAs [lender, borrower] <> discloseMany (Map.values ds)) $
+    exerciseCmd principalRequestCid LoanPrincipalRequest_CompleteFunding with
+      allocationCid = allocCid
+      extraArgs = ExtraArgs with
+        context = context.choiceContext
+        meta = emptyMetadata
+
+  -- verify loan created
+  [loanForLender] <- query @Loan lender
+  loanForLender._2.principal === 100.0
+  loanForLender._2.borrower === borrower
+
+-------------------------------------------------------------------------------
+-- Utility for matching allocations by 'Reference'
+-------------------------------------------------------------------------------
+
+fetchAllocationsForRenewal : Party -> Reference -> Script (ContractId Allocation, AllocationView)
+fetchAllocationsForRenewal p ref = do
+  allocs <- queryInterface @Allocation p
+  let matchingAllocs = do
+        (cid, Some alloc) <- allocs
+        guard (alloc.allocation.settlement.settlementRef == ref)
+        pure (cid, alloc)
+  length matchingAllocs === 1
+  pure $ head $ sortOn (\(_, alloc) -> alloc.allocation.settlement.settlementRef.id) matchingAllocs

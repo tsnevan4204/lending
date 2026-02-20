@@ -26,7 +26,10 @@ import quickstart_licensing.licensing.license.License;
 import quickstart_licensing.licensing.license.LicenseRenewalRequest;
 import quickstart_licensing.loan.creditprofile.CreditProfile;
 import quickstart_licensing.loan.loan.Loan;
+import quickstart_licensing.loan.loanoffer.FundingIntent;
 import quickstart_licensing.loan.loanoffer.LoanOffer;
+import quickstart_licensing.loan.loanoffer.LoanPrincipalRequest;
+import quickstart_licensing.loan.loanrepaymentrequest.LoanRepaymentRequest;
 import quickstart_licensing.loan.loanrequest.LoanRequest;
 import quickstart_licensing.loan.loanrequest.LoanRequestForLender;
 import splice_api_token_allocation_request_v1.splice.api.token.allocationrequestv1.AllocationRequest;
@@ -86,6 +89,16 @@ public class DamlRepository {
     public record LicenseWithRenewalRequests(
             Contract<License> license,
             List<LicenseRenewalRequestWithAllocationCid> renewals) {
+    }
+
+    public record LoanPrincipalRequestWithAllocationCid(
+            Contract<LoanPrincipalRequest> principalRequest,
+            Optional<ContractId<Allocation>> allocationCid) {
+    }
+
+    public record LoanRepaymentRequestWithAllocationCid(
+            Contract<LoanRepaymentRequest> repaymentRequest,
+            Optional<ContractId<Allocation>> allocationCid) {
     }
 
     private <T extends Template> T extractPayload(Class<T> clazz, String payload) {
@@ -371,5 +384,114 @@ public class DamlRepository {
     public CompletableFuture<Optional<Contract<Loan>>> findLoanById(String contractId) {
         return pqs.contractByContractId(Loan.class, contractId)
                 .exceptionally(ex -> handlePqsTemplateNotFoundOptional(ex, "Loan"));
+    }
+
+    /**
+     * Fetch FundingIntent by contract id.
+     */
+    public CompletableFuture<Optional<Contract<FundingIntent>>> findFundingIntentById(String contractId) {
+        return pqs.contractByContractId(FundingIntent.class, contractId)
+                .exceptionally(ex -> handlePqsTemplateNotFoundOptional(ex, "FundingIntent"));
+    }
+
+    /**
+     * Fetch LoanPrincipalRequest by contract id.
+     */
+    public CompletableFuture<Optional<Contract<LoanPrincipalRequest>>> findLoanPrincipalRequestById(String contractId) {
+        return pqs.contractByContractId(LoanPrincipalRequest.class, contractId)
+                .exceptionally(ex -> handlePqsTemplateNotFoundOptional(ex, "LoanPrincipalRequest"));
+    }
+
+    /**
+     * Fetch LoanRepaymentRequest by contract id.
+     */
+    public CompletableFuture<Optional<Contract<LoanRepaymentRequest>>> findLoanRepaymentRequestById(String contractId) {
+        return pqs.contractByContractId(LoanRepaymentRequest.class, contractId)
+                .exceptionally(ex -> handlePqsTemplateNotFoundOptional(ex, "LoanRepaymentRequest"));
+    }
+
+    /**
+     * Find active FundingIntent contracts for a lender (observer).
+     */
+    public CompletableFuture<List<Contract<FundingIntent>>> findFundingIntentsByLender(String lenderParty) {
+        return pqs.activeWhere(FundingIntent.class, "lender", lenderParty)
+                .exceptionally(ex -> handlePqsTemplateNotFound(ex, "FundingIntent"));
+    }
+
+    /**
+     * Find active FundingIntent contracts for a borrower (signatory).
+     */
+    public CompletableFuture<List<Contract<FundingIntent>>> findFundingIntentsByBorrower(String borrowerParty) {
+        return pqs.activeWhere(FundingIntent.class, "borrower", borrowerParty)
+                .exceptionally(ex -> handlePqsTemplateNotFound(ex, "FundingIntent"));
+    }
+
+    /**
+     * Find LoanPrincipalRequest contracts for a lender, with optional Allocation CID if allocated.
+     */
+    public CompletableFuture<List<LoanPrincipalRequestWithAllocationCid>> findLoanPrincipalRequestsByLender(
+            String lenderParty) {
+        String sql = """
+                SELECT pr.contract_id    AS pr_contract_id,
+                       pr.payload        AS pr_payload,
+                       alloc.contract_id AS allocation_contract_id
+                FROM active(?) pr
+                LEFT JOIN active(?) alloc ON
+                    pr.payload->>'requestId' = alloc.payload->'allocation'->'settlement'->'settlementRef'->>'id'
+                    AND pr.payload->>'lender' = alloc.payload->'allocation'->'transferLeg'->>'sender'
+                WHERE pr.payload->>'lender' = ?
+                ORDER BY pr.contract_id
+                """;
+        List<LoanPrincipalRequestWithAllocationCid> results = new java.util.ArrayList<>();
+        return pqs.query(sql, rs -> {
+                    var prId = rs.getString("pr_contract_id");
+                    results.add(new LoanPrincipalRequestWithAllocationCid(
+                            extract(LoanPrincipalRequest.class, cid(LoanPrincipalRequest.class, prId), rs.getString("pr_payload")),
+                            optionalCid(Allocation.class, rs.getString("allocation_contract_id"))
+                    ));
+                },
+                qualifiedName(LoanPrincipalRequest.class),
+                qualifiedName(Allocation.class),
+                lenderParty
+        ).thenApply(v -> results);
+    }
+
+    /**
+     * Find LoanRepaymentRequest contracts for a lender, with optional Allocation CID if allocated.
+     */
+    public CompletableFuture<List<LoanRepaymentRequestWithAllocationCid>> findLoanRepaymentRequestsByLender(
+            String lenderParty) {
+        String sql = """
+                SELECT rr.contract_id    AS rr_contract_id,
+                       rr.payload        AS rr_payload,
+                       alloc.contract_id AS allocation_contract_id
+                FROM active(?) rr
+                LEFT JOIN active(?) alloc ON
+                    rr.payload->>'requestId' = alloc.payload->'allocation'->'settlement'->'settlementRef'->>'id'
+                    AND rr.payload->>'borrower' = alloc.payload->'allocation'->'transferLeg'->>'sender'
+                WHERE rr.payload->>'lender' = ?
+                ORDER BY rr.contract_id
+                """;
+        List<LoanRepaymentRequestWithAllocationCid> results = new java.util.ArrayList<>();
+        return pqs.query(sql, rs -> {
+                    var rrId = rs.getString("rr_contract_id");
+                    results.add(new LoanRepaymentRequestWithAllocationCid(
+                            extract(LoanRepaymentRequest.class, cid(LoanRepaymentRequest.class, rrId), rs.getString("rr_payload")),
+                            optionalCid(Allocation.class, rs.getString("allocation_contract_id"))
+                    ));
+                },
+                qualifiedName(LoanRepaymentRequest.class),
+                qualifiedName(Allocation.class),
+                lenderParty
+        ).thenApply(v -> results);
+    }
+
+    /**
+     * Find LoanRepaymentRequest contracts for a borrower (signatory).
+     */
+    public CompletableFuture<List<Contract<LoanRepaymentRequest>>> findLoanRepaymentRequestsByBorrower(
+            String borrowerParty) {
+        return pqs.activeWhere(LoanRepaymentRequest.class, "borrower", borrowerParty)
+                .exceptionally(ex -> handlePqsTemplateNotFound(ex, "LoanRepaymentRequest"));
     }
 }

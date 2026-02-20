@@ -52,7 +52,10 @@ const BorrowerDashboard: React.FC = () => {
                         {offersToAccept.map((offer) => (
                             <li key={offer.contractId} className="list-group-item d-flex justify-content-between align-items-center">
                                 <span>{offer.amount} @ {offer.interestRate}% from {offer.lender}</span>
-                                <Link to={`/loans/fund?offerId=${encodeURIComponent(offer.contractId)}`} className="btn btn-sm btn-primary">Accept & fund</Link>
+                                <div className="d-flex gap-2">
+                                    <Link to={`/loans/fund?offerId=${encodeURIComponent(offer.contractId)}`} className="btn btn-sm btn-primary">Accept &amp; fund</Link>
+                                    <Link to={`/loans/fund?offerId=${encodeURIComponent(offer.contractId)}&mode=token`} className="btn btn-sm btn-outline-primary">Fund with token</Link>
+                                </div>
                             </li>
                         ))}
                     </ul>
@@ -70,7 +73,10 @@ const BorrowerDashboard: React.FC = () => {
                         {activeLoans.map((loan) => (
                             <li key={loan.contractId} className="list-group-item d-flex justify-content-between align-items-center">
                                 <span>{loan.principal} @ {loan.interestRate}% — due {formatDateTime(loan.dueDate)}</span>
-                                <Link to={'/loans/repay/' + encodeURIComponent(loan.contractId)} className="btn btn-sm btn-primary">Repay</Link>
+                                <div className="d-flex gap-2">
+                                    <Link to={'/loans/repay/' + encodeURIComponent(loan.contractId)} className="btn btn-sm btn-primary">Repay</Link>
+                                    <Link to={`/loans/repay/${encodeURIComponent(loan.contractId)}?mode=token`} className="btn btn-sm btn-outline-primary">Repay with token</Link>
+                                </div>
                             </li>
                         ))}
                     </ul>

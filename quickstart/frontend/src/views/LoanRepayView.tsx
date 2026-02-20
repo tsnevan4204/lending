@@ -2,15 +2,21 @@
 // SPDX-License-Identifier: 0BSD
 
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLoanStore } from '../stores/loanStore';
 import { formatDateTime } from '../utils/format';
 
 const LoanRepayPage: React.FC = () => {
     const { contractId } = useParams<{ contractId: string }>();
     const navigate = useNavigate();
-    const { loans, fetchLoans, repayLoan } = useLoanStore();
+    const [searchParams] = useSearchParams();
+    const { loans, fetchLoans, repayLoan, requestRepayment } = useLoanStore();
     const [submitting, setSubmitting] = useState(false);
+    const [description, setDescription] = useState('Token-based loan repayment');
+    const [prepareUntilDuration, setPrepareUntilDuration] = useState('PT2H');
+    const [settleBeforeDuration, setSettleBeforeDuration] = useState('PT24H');
+    const mode = searchParams.get('mode') ?? 'now';
+    const isTokenMode = mode === 'token';
 
     useEffect(() => {
         fetchLoans();
@@ -22,8 +28,17 @@ const LoanRepayPage: React.FC = () => {
         if (!loan?.contractId) return;
         setSubmitting(true);
         try {
-            await repayLoan(loan.contractId);
-            navigate('/borrower');
+            if (isTokenMode) {
+                await requestRepayment(loan.contractId, {
+                    description: description.trim() || undefined,
+                    prepareUntilDuration: prepareUntilDuration.trim() || undefined,
+                    settleBeforeDuration: settleBeforeDuration.trim() || undefined,
+                });
+                navigate('/borrower');
+            } else {
+                await repayLoan(loan.contractId);
+                navigate('/borrower');
+            }
         } finally {
             setSubmitting(false);
         }
@@ -35,15 +50,57 @@ const LoanRepayPage: React.FC = () => {
 
     return (
         <div>
-            <h2>Repay loan</h2>
+            <h2>{isTokenMode ? 'Repay loan with token' : 'Repay loan'}</h2>
             <div className="card p-4 mb-4">
                 <p><strong>Principal:</strong> {loan.principal}</p>
                 <p><strong>Interest rate:</strong> {loan.interestRate}%</p>
                 <p><strong>Due date:</strong> {formatDateTime(loan.dueDate)}</p>
-                <p className="text-muted">Repayment will archive the loan and update your credit profile.</p>
+                <p className="text-muted">
+                    {isTokenMode
+                        ? 'Create a token repayment request. Lender will allocate and complete the repayment.'
+                        : 'Repayment will archive the loan and update your credit profile.'}
+                </p>
             </div>
+            {isTokenMode && (
+                <div className="card p-4 mb-4">
+                    <div className="mb-3">
+                        <label htmlFor="repay-description" className="form-label">Description</label>
+                        <input
+                            id="repay-description"
+                            type="text"
+                            className="form-control"
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                        />
+                    </div>
+                    <div className="mb-3">
+                        <label htmlFor="repay-prepare" className="form-label">Prepare window (ISO-8601 duration)</label>
+                        <input
+                            id="repay-prepare"
+                            type="text"
+                            className="form-control"
+                            value={prepareUntilDuration}
+                            onChange={(e) => setPrepareUntilDuration(e.target.value)}
+                            placeholder="PT2H"
+                        />
+                        <small className="form-text text-muted">Example: PT2H (2 hours)</small>
+                    </div>
+                    <div className="mb-3">
+                        <label htmlFor="repay-settle" className="form-label">Settle window (ISO-8601 duration)</label>
+                        <input
+                            id="repay-settle"
+                            type="text"
+                            className="form-control"
+                            value={settleBeforeDuration}
+                            onChange={(e) => setSettleBeforeDuration(e.target.value)}
+                            placeholder="PT24H"
+                        />
+                        <small className="form-text text-muted">Example: PT24H (24 hours)</small>
+                    </div>
+                </div>
+            )}
             <button type="button" className="btn btn-primary" onClick={handleRepay} disabled={submitting}>
-                {submitting ? 'Repaying…' : 'Repay loan'}
+                {submitting ? 'Repaying…' : (isTokenMode ? 'Request token repayment' : 'Repay loan')}
             </button>
         </div>
     );

@@ -504,6 +504,128 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /loans/offer/{contractId}:accept-with-token:
+    post:
+      tags: [Loans]
+      summary: Accept loan offer with token settlement (borrower)
+      operationId: acceptLoanOfferWithToken
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptOfferWithTokenRequest'
+      responses:
+        '201':
+          description: Funding intent created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundingIntentResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /loans/funding-intent/{contractId}:confirm:
+    post:
+      tags: [Loans]
+      summary: Confirm a funding intent (lender)
+      operationId: confirmFundingIntent
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '201':
+          description: Loan principal request created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanPrincipalRequestResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /loans/funding-intents:
+    get:
+      tags: [Loans]
+      summary: List funding intents visible to the authenticated party
+      operationId: listFundingIntents
+      responses:
+        '200':
+          description: List of funding intents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LoanFundingIntent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /loans/principal-requests:
+    get:
+      tags: [Loans]
+      summary: List loan principal requests (lender)
+      operationId: listPrincipalRequests
+      responses:
+        '200':
+          description: List of loan principal requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LoanPrincipalRequestSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /loans/principal-requests/{contractId}:complete-funding:
+    post:
+      tags: [Loans]
+      summary: Complete token funding for a loan principal request (lender)
+      operationId: completeLoanFunding
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteLoanFundingRequest'
+      responses:
+        '200':
+          description: Loan funded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanFundResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /loans/{contractId}/repay:
     post:
       tags: [Loans]
@@ -517,6 +639,85 @@ paths:
           description: Loan repaid
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /loans/{contractId}:request-repayment:
+    post:
+      tags: [Loans]
+      summary: Request token-based repayment (borrower)
+      operationId: requestLoanRepayment
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestRepaymentRequest'
+      responses:
+        '201':
+          description: Repayment request created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanRepaymentRequestResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /loans/repayment-requests:
+    get:
+      tags: [Loans]
+      summary: List loan repayment requests visible to the authenticated party
+      operationId: listRepaymentRequests
+      responses:
+        '200':
+          description: List of loan repayment requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LoanRepaymentRequestSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /loans/repayment-requests/{contractId}:complete-repayment:
+    post:
+      tags: [Loans]
+      summary: Complete token-based repayment (lender)
+      operationId: completeLoanRepayment
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteLoanRepaymentRequest'
+      responses:
+        '200':
+          description: Loan repayment completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanRepaymentResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -1092,6 +1293,205 @@ components:
       type: object
       properties:
         loanId:
+          type: string
+
+    AcceptOfferWithTokenRequest:
+      type: object
+      required: [creditProfileId]
+      properties:
+        creditProfileId:
+          type: string
+        requestId:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        prepareUntilDuration:
+          type: string
+          description: ISO-8601 duration until allocation window closes (e.g. PT2H)
+          nullable: true
+        settleBeforeDuration:
+          type: string
+          description: ISO-8601 duration until settlement deadline (e.g. PT24H)
+          nullable: true
+
+    FundingIntentResult:
+      type: object
+      properties:
+        fundingIntentId:
+          type: string
+
+    LoanPrincipalRequestResult:
+      type: object
+      properties:
+        principalRequestId:
+          type: string
+
+    CompleteLoanFundingRequest:
+      type: object
+      required: [allocationContractId]
+      properties:
+        allocationContractId:
+          type: string
+
+    LoanFundingIntent:
+      type: object
+      required:
+        [contractId, requestId, lender, borrower, principal, interestRate, durationDays, prepareUntil, settleBefore, requestedAt, loanRequestId, offerContractId, creditProfileId]
+      properties:
+        contractId:
+          type: string
+        requestId:
+          type: string
+        lender:
+          type: string
+        borrower:
+          type: string
+        principal:
+          type: number
+        interestRate:
+          type: number
+        durationDays:
+          type: integer
+        prepareUntil:
+          type: string
+          format: date-time
+        settleBefore:
+          type: string
+          format: date-time
+        requestedAt:
+          type: string
+          format: date-time
+        description:
+          type: string
+          nullable: true
+        loanRequestId:
+          type: string
+        offerContractId:
+          type: string
+        creditProfileId:
+          type: string
+
+    LoanPrincipalRequestSummary:
+      type: object
+      required:
+        [contractId, requestId, lender, borrower, principal, interestRate, durationDays, prepareUntil, settleBefore, requestedAt, loanRequestId, offerContractId, creditProfileId]
+      properties:
+        contractId:
+          type: string
+        requestId:
+          type: string
+        lender:
+          type: string
+        borrower:
+          type: string
+        principal:
+          type: number
+        interestRate:
+          type: number
+        durationDays:
+          type: integer
+        prepareUntil:
+          type: string
+          format: date-time
+        settleBefore:
+          type: string
+          format: date-time
+        requestedAt:
+          type: string
+          format: date-time
+        description:
+          type: string
+          nullable: true
+        loanRequestId:
+          type: string
+        offerContractId:
+          type: string
+        creditProfileId:
+          type: string
+        allocationCid:
+          type: string
+          nullable: true
+        prepareDeadlinePassed:
+          type: boolean
+        settleDeadlinePassed:
+          type: boolean
+
+    RequestRepaymentRequest:
+      type: object
+      properties:
+        requestId:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        prepareUntilDuration:
+          type: string
+          description: ISO-8601 duration until allocation window closes (e.g. PT2H)
+          nullable: true
+        settleBeforeDuration:
+          type: string
+          description: ISO-8601 duration until settlement deadline (e.g. PT24H)
+          nullable: true
+
+    LoanRepaymentRequestResult:
+      type: object
+      properties:
+        repaymentRequestId:
+          type: string
+
+    CompleteLoanRepaymentRequest:
+      type: object
+      required: [allocationContractId]
+      properties:
+        allocationContractId:
+          type: string
+
+    LoanRepaymentRequestSummary:
+      type: object
+      required:
+        [contractId, requestId, lender, borrower, repaymentAmount, prepareUntil, settleBefore, requestedAt, loanContractId, creditProfileId]
+      properties:
+        contractId:
+          type: string
+        requestId:
+          type: string
+        lender:
+          type: string
+        borrower:
+          type: string
+        repaymentAmount:
+          type: number
+        prepareUntil:
+          type: string
+          format: date-time
+        settleBefore:
+          type: string
+          format: date-time
+        requestedAt:
+          type: string
+          format: date-time
+        description:
+          type: string
+          nullable: true
+        loanContractId:
+          type: string
+        creditProfileId:
+          type: string
+        allocationCid:
+          type: string
+          nullable: true
+        prepareDeadlinePassed:
+          type: boolean
+        settleDeadlinePassed:
+          type: boolean
+
+    LoanRepaymentResult:
+      type: object
+      properties:
+        creditProfileId:
           type: string
 
     Loan:

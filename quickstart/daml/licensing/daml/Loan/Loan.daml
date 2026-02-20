@@ -7,7 +7,9 @@ module Loan.Loan where
 
 import Loan.LoanTypes
 import Loan.CreditProfile
+import Loan.LoanRepaymentRequest
 import Licensing.Util as Util (require)
+import Splice.Api.Token.HoldingV1 (InstrumentId)
 
 -- | An active loan. Signatories: lender and borrower. No other observers.
 --   Repayment and default choices update the borrower's credit profile.
@@ -29,6 +31,42 @@ template Loan with
         require "Loan must be active" (status == Active)
         newProfileCid <- exercise creditProfileId CreditProfile_RecordSuccessfulLoan
         return (newProfileCid, ())
+
+    -- | Lender completes repayment after token transfer. Archives the loan and updates credit profile.
+    choice Loan_CompleteRepaymentReceived : (ContractId CreditProfile, ())
+      controller lender
+      do
+        require "Loan must be active" (status == Active)
+        newProfileCid <- exercise creditProfileId CreditProfile_RecordSuccessfulLoan
+        return (newProfileCid, ())
+
+    -- | Borrower requests token-based repayment (borrower -> lender).
+    --   Nonconsuming so the Loan stays active until lender exercises CompleteRepaymentReceived.
+    nonconsuming choice Loan_RequestRepayment : ContractId LoanRepaymentRequest
+      with
+        requestId : Text
+        instrumentId : InstrumentId
+        prepareUntil : Time
+        settleBefore : Time
+        description : Text
+      controller borrower
+      do
+        now <- getTime
+        require "prepareUntil < settleBefore" (prepareUntil < settleBefore)
+        require "Preparation time has not passed" (now < prepareUntil)
+        let repaymentAmount = principal + (principal * interestRate / 100.0)
+        create LoanRepaymentRequest with
+          requestId
+          lender
+          borrower
+          repaymentAmount
+          instrumentId
+          prepareUntil
+          settleBefore
+          requestedAt = now
+          description
+          loanContractIdText = show self
+          creditProfileId
 
     -- | Mark the loan as defaulted. Archives the loan and updates credit profile negatively.
     choice Loan_MarkDefault : (ContractId CreditProfile, ())

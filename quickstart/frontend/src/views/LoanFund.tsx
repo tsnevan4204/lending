@@ -8,11 +8,16 @@ import { useLoanStore } from '../stores/loanStore';
 const LoanFundView: React.FC = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const { fundLoan, creditProfile, fetchCreditProfile } = useLoanStore();
+    const { fundLoan, acceptOfferWithToken, creditProfile, fetchCreditProfile } = useLoanStore();
     const [offerContractId, setOfferContractId] = useState('');
     const [creditProfileId, setCreditProfileId] = useState('');
+    const [description, setDescription] = useState('Token-based loan funding');
+    const [prepareUntilDuration, setPrepareUntilDuration] = useState('PT2H');
+    const [settleBeforeDuration, setSettleBeforeDuration] = useState('PT24H');
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
+    const mode = searchParams.get('mode') ?? 'now';
+    const isTokenMode = mode === 'token';
 
     useEffect(() => {
         const offerId = searchParams.get('offerId');
@@ -37,8 +42,18 @@ const LoanFundView: React.FC = () => {
         }
         setSubmitting(true);
         try {
-            await fundLoan(offerContractId.trim(), { creditProfileId: effectiveCreditProfileId });
-            navigate('/borrower');
+            if (isTokenMode) {
+                await acceptOfferWithToken(offerContractId.trim(), {
+                    creditProfileId: effectiveCreditProfileId,
+                    description: description.trim() || undefined,
+                    prepareUntilDuration: prepareUntilDuration.trim() || undefined,
+                    settleBeforeDuration: settleBeforeDuration.trim() || undefined,
+                });
+                navigate('/borrower');
+            } else {
+                await fundLoan(offerContractId.trim(), { creditProfileId: effectiveCreditProfileId });
+                navigate('/borrower');
+            }
         } catch (err: unknown) {
             const res = (err as { response?: { data?: { message?: string } | string } })?.response?.data;
             const msg = (typeof res === 'object' && res?.message) ? res.message
@@ -53,8 +68,12 @@ const LoanFundView: React.FC = () => {
 
     return (
         <div>
-            <h2>Fund loan (accept offer)</h2>
-            <p className="text-muted">Accept a loan offer by providing the offer contract ID and your credit profile contract ID.</p>
+            <h2>{isTokenMode ? 'Fund loan with token' : 'Fund loan (accept offer)'}</h2>
+            <p className="text-muted">
+                {isTokenMode
+                    ? 'Create a token funding intent. The lender will confirm it and allocate in the wallet.'
+                    : 'Accept a loan offer by providing the offer contract ID and your credit profile contract ID.'}
+            </p>
             <form onSubmit={handleSubmit} className="card p-4">
                 <div className="mb-3">
                     <label htmlFor="loan-fund-offer-id" className="form-label">Loan offer contract ID</label>
@@ -84,6 +103,47 @@ const LoanFundView: React.FC = () => {
                         <small className="form-text text-muted">Pre-filled from your profile.</small>
                     )}
                 </div>
+                {isTokenMode && (
+                    <>
+                        <div className="mb-3">
+                            <label htmlFor="loan-fund-description" className="form-label">Description</label>
+                            <input
+                                id="loan-fund-description"
+                                name="description"
+                                type="text"
+                                className="form-control"
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                            />
+                        </div>
+                        <div className="mb-3">
+                            <label htmlFor="loan-fund-prepare" className="form-label">Prepare window (ISO-8601 duration)</label>
+                            <input
+                                id="loan-fund-prepare"
+                                name="prepareUntilDuration"
+                                type="text"
+                                className="form-control"
+                                value={prepareUntilDuration}
+                                onChange={(e) => setPrepareUntilDuration(e.target.value)}
+                                placeholder="PT2H"
+                            />
+                            <small className="form-text text-muted">Example: PT2H (2 hours)</small>
+                        </div>
+                        <div className="mb-3">
+                            <label htmlFor="loan-fund-settle" className="form-label">Settle window (ISO-8601 duration)</label>
+                            <input
+                                id="loan-fund-settle"
+                                name="settleBeforeDuration"
+                                type="text"
+                                className="form-control"
+                                value={settleBeforeDuration}
+                                onChange={(e) => setSettleBeforeDuration(e.target.value)}
+                                placeholder="PT24H"
+                            />
+                            <small className="form-text text-muted">Example: PT24H (24 hours)</small>
+                        </div>
+                    </>
+                )}
                 {submitError && (
                     <div className="alert alert-danger mb-3" role="alert">
                         {submitError}
@@ -93,7 +153,7 @@ const LoanFundView: React.FC = () => {
                     </div>
                 )}
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
-                    {submitting ? 'Funding…' : 'Fund loan'}
+                    {submitting ? 'Funding…' : (isTokenMode ? 'Create funding intent' : 'Fund loan')}
                 </button>
             </form>
         </div>

@@ -9,14 +9,35 @@ import { formatDateTime } from '../utils/format';
 
 const LenderDashboard: React.FC = () => {
     const { user } = useUserStore();
-    const { loans, loanOffers, loanRequests, fetchLoans, fetchLoanOffers, fetchLoanRequests } = useLoanStore();
+    const {
+        loans,
+        loanOffers,
+        loanRequests,
+        fundingIntents,
+        principalRequests,
+        repaymentRequests,
+        fetchLoans,
+        fetchLoanOffers,
+        fetchLoanRequests,
+        fetchFundingIntents,
+        fetchPrincipalRequests,
+        fetchRepaymentRequests,
+        confirmFundingIntent,
+        completeLoanFunding,
+        completeLoanRepayment,
+    } = useLoanStore();
     const currentParty = user?.party ?? '';
+    const walletUrl = user?.walletUrl ?? '';
+    const walletAllocationsUrl = walletUrl ? `${walletUrl.replace(/\/?$/, '/') }allocations` : '';
 
     useEffect(() => {
         fetchLoans();
         fetchLoanOffers();
         fetchLoanRequests();
-    }, [fetchLoans, fetchLoanOffers, fetchLoanRequests]);
+        fetchFundingIntents();
+        fetchPrincipalRequests();
+        fetchRepaymentRequests();
+    }, [fetchLoans, fetchLoanOffers, fetchLoanRequests, fetchFundingIntents, fetchPrincipalRequests, fetchRepaymentRequests]);
 
     // Refetch periodically so new offers/loans show up after PQS indexing.
     useEffect(() => {
@@ -24,9 +45,12 @@ const LenderDashboard: React.FC = () => {
             fetchLoans();
             fetchLoanOffers();
             fetchLoanRequests();
+            fetchFundingIntents();
+            fetchPrincipalRequests();
+            fetchRepaymentRequests();
         }, 10000);
         return () => clearInterval(interval);
-    }, [fetchLoans, fetchLoanOffers, fetchLoanRequests]);
+    }, [fetchLoans, fetchLoanOffers, fetchLoanRequests, fetchFundingIntents, fetchPrincipalRequests, fetchRepaymentRequests]);
 
     const myLoans = loans.filter((l) => l.status === 'Active' || l.status === 'Repaid');
     const party = (currentParty || '').trim();
@@ -77,6 +101,88 @@ const LenderDashboard: React.FC = () => {
                         ))}
                     </ul>
                 )}
+            </section>
+            <section className="card mb-4">
+                <h3>Funding intents (token)</h3>
+                {fundingIntents.length === 0 ? (
+                    <p>No funding intents yet.</p>
+                ) : (
+                    <ul className="list-group">
+                        {fundingIntents.map((intent) => (
+                            <li key={intent.contractId} className="list-group-item d-flex justify-content-between align-items-center">
+                                <span>{intent.principal} @ {intent.interestRate}% — borrower {intent.borrower}</span>
+                                <button className="btn btn-sm btn-outline-primary" onClick={() => confirmFundingIntent(intent.contractId)}>
+                                    Confirm
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+                <p className="small text-muted mb-0">Confirming creates the on-ledger principal request for wallet allocation.</p>
+            </section>
+            <section className="card mb-4">
+                <h3>Principal requests (token)</h3>
+                {principalRequests.length === 0 ? (
+                    <p>No principal requests yet.</p>
+                ) : (
+                    <ul className="list-group">
+                        {principalRequests.map((req) => (
+                            <li key={req.contractId} className="list-group-item d-flex justify-content-between align-items-center">
+                                <span>{req.principal} @ {req.interestRate}% — borrower {req.borrower}</span>
+                                <div className="d-flex gap-2">
+                                    {walletAllocationsUrl && (
+                                        <a href={walletAllocationsUrl} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-secondary">
+                                            Open wallet
+                                        </a>
+                                    )}
+                                    {req.allocationCid ? (
+                                        <button
+                                            className="btn btn-sm btn-primary"
+                                            onClick={() => completeLoanFunding(req.contractId, { allocationContractId: req.allocationCid! })}
+                                        >
+                                            Complete funding
+                                        </button>
+                                    ) : (
+                                        <span className="badge bg-info align-self-center">Awaiting allocation</span>
+                                    )}
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+                <p className="small text-muted mb-0">Allocate in the wallet, then complete funding here.</p>
+            </section>
+            <section className="card mb-4">
+                <h3>Repayment requests (token)</h3>
+                {repaymentRequests.length === 0 ? (
+                    <p>No repayment requests yet.</p>
+                ) : (
+                    <ul className="list-group">
+                        {repaymentRequests.map((req) => (
+                            <li key={req.contractId} className="list-group-item d-flex justify-content-between align-items-center">
+                                <span>{req.repaymentAmount} — borrower {req.borrower}</span>
+                                <div className="d-flex gap-2">
+                                    {walletAllocationsUrl && (
+                                        <a href={walletAllocationsUrl} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-secondary">
+                                            Open wallet
+                                        </a>
+                                    )}
+                                    {req.allocationCid ? (
+                                        <button
+                                            className="btn btn-sm btn-primary"
+                                            onClick={() => completeLoanRepayment(req.contractId, { allocationContractId: req.allocationCid! })}
+                                        >
+                                            Complete repayment
+                                        </button>
+                                    ) : (
+                                        <span className="badge bg-info align-self-center">Awaiting allocation</span>
+                                    )}
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+                <p className="small text-muted mb-0">Borrower allocates in the wallet; complete repayment here.</p>
             </section>
             {offersToMe.length > 0 && (
                 <section className="card mb-4">

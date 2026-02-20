@@ -10,19 +10,28 @@ import static com.digitalasset.quickstart.utility.Utils.toOffsetDateTime;
 
 import com.digitalasset.quickstart.api.LoansApi;
 import com.digitalasset.quickstart.ledger.LedgerApi;
+import com.digitalasset.quickstart.ledger.TokenStandardProxy;
 import com.digitalasset.quickstart.repository.DamlRepository;
 import com.digitalasset.quickstart.repository.TenantPropertiesRepository;
 import com.digitalasset.quickstart.security.AuthUtils;
+import com.digitalasset.quickstart.tokenstandard.openapi.allocation.model.DisclosedContract;
 import com.digitalasset.transcode.java.ContractId;
 import com.digitalasset.transcode.java.Party;
+import com.google.protobuf.ByteString;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Objects;
 import org.openapitools.model.*;
+import org.openapitools.jackson.nullable.JsonNullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -30,6 +39,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -38,7 +48,18 @@ import quickstart_licensing.loan.loan.Loan;
 import quickstart_licensing.loan.loanoffer.LoanOffer;
 import quickstart_licensing.loan.loanrequest.LoanRequest;
 import quickstart_licensing.loan.loanrequest.LoanRequestForLender;
+import quickstart_licensing.loan.loanoffer.FundingIntent;
+import quickstart_licensing.loan.loanoffer.FundingIntent.FundingIntent_ConfirmByLender;
+import quickstart_licensing.loan.loanoffer.LoanPrincipalRequest;
+import quickstart_licensing.loan.loanoffer.LoanOffer.LoanOffer_AcceptWithToken;
+import quickstart_licensing.loan.loanrepaymentrequest.LoanRepaymentRequest;
 import daml_prim_da_types.da.types.Tuple2;
+import splice_api_token_holding_v1.splice.api.token.holdingv1.InstrumentId;
+import splice_api_token_metadata_v1.splice.api.token.metadatav1.AnyValue;
+import splice_api_token_metadata_v1.splice.api.token.metadatav1.ChoiceContext;
+import splice_api_token_metadata_v1.splice.api.token.metadatav1.ExtraArgs;
+import com.daml.ledger.api.v2.CommandsOuterClass;
+import com.daml.ledger.api.v2.ValueOuterClass;
 
 /**
  * Loan and credit profile API. All operations act as the authenticated party (borrower or lender).
@@ -54,12 +75,15 @@ public class LoanApiImpl implements LoansApi {
     private final DamlRepository damlRepository;
     private final AuthUtils auth;
     private final TenantPropertiesRepository tenantPropertiesRepository;
+    private final TokenStandardProxy tokenStandardProxy;
 
     public LoanApiImpl(LedgerApi ledger, DamlRepository damlRepository, AuthUtils auth,
+                       TokenStandardProxy tokenStandardProxy,
                        TenantPropertiesRepository tenantPropertiesRepository) {
         this.ledger = ledger;
         this.damlRepository = damlRepository;
         this.auth = auth;
+        this.tokenStandardProxy = tokenStandardProxy;
         this.tenantPropertiesRepository = tenantPropertiesRepository;
     }
 
@@ -305,6 +329,299 @@ public class LoanApiImpl implements LoansApi {
         });
     }
 
+    @WithSpan
+    @PostMapping("/loans/offer/{contractId}:accept-with-token")
+    @ResponseBody
+    public CompletableFuture<ResponseEntity<FundingIntentResult>> acceptLoanOfferWithToken(
+            @PathVariable("contractId") String contractId,
+            String commandId,
+            AcceptOfferWithTokenRequest request) {
+        var ctx = tracingCtx(logger, "acceptLoanOfferWithToken", "contractId", contractId);
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
+            var offerFut = damlRepository.findLoanOfferById(contractId);
+            var adminIdFut = tokenStandardProxy.getRegistryAdminId();
+            return offerFut.thenCombine(adminIdFut, (optOffer, adminId) -> {
+                var offer = ensurePresent(optOffer, "LoanOffer not found: %s", contractId);
+                String borrowerParty = offer.payload.getBorrower.getParty;
+                if (!party.equals(borrowerParty)) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            String.format("Only the borrower (%s) can request token funding. You are logged in as %s.",
+                                    borrowerParty, party));
+                }
+                String requestId = request.getRequestId().isPresent() && !request.getRequestId().get().isBlank()
+                        ? request.getRequestId().get()
+                        : UUID.randomUUID().toString();
+                Duration prepareDelta = request.getPrepareUntilDuration().isPresent()
+                        ? Duration.parse(request.getPrepareUntilDuration().get())
+                        : Duration.ofHours(2);
+                Duration settleDelta = request.getSettleBeforeDuration().isPresent()
+                        ? Duration.parse(request.getSettleBeforeDuration().get())
+                        : Duration.ofHours(24);
+                Instant now = Instant.now();
+                var choice = new LoanOffer_AcceptWithToken(
+                        requestId,
+                        new InstrumentId(new Party(adminId), "Amulet"),
+                        now.plus(prepareDelta),
+                        now.plus(settleDelta),
+                        request.getDescription().isPresent() ? request.getDescription().get() : "Token-based loan funding",
+                        new ContractId<>(request.getCreditProfileId())
+                );
+                return ledger.exerciseAndGetResult(
+                                offer.contractId,
+                                choice,
+                                commandId != null ? commandId : UUID.randomUUID().toString(),
+                                party)
+                        .thenApply(intentCid -> {
+                            FundingIntentResult result = new FundingIntentResult();
+                            result.setFundingIntentId(intentCid.getContractId);
+                            return ResponseEntity.status(HttpStatus.CREATED).body(result);
+                        });
+            }).thenCompose(x -> x);
+        }));
+    }
+
+    @WithSpan
+    @PostMapping("/loans/funding-intent/{contractId}:confirm")
+    @ResponseBody
+    public CompletableFuture<ResponseEntity<LoanPrincipalRequestResult>> confirmFundingIntent(
+            @PathVariable("contractId") String contractId,
+            String commandId) {
+        var ctx = tracingCtx(logger, "confirmFundingIntent", "contractId", contractId);
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
+                damlRepository.findFundingIntentById(contractId).thenCompose(optIntent -> {
+                    var intent = ensurePresent(optIntent, "FundingIntent not found: %s", contractId);
+                    String lenderParty = intent.payload.getLender.getParty;
+                    if (!party.equals(lenderParty)) {
+                        throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                                String.format("Only the lender (%s) can confirm funding. You are logged in as %s.",
+                                        lenderParty, party));
+                    }
+                    var choice = new FundingIntent_ConfirmByLender();
+                    return ledger.exerciseAndGetResult(
+                                    intent.contractId,
+                                    choice,
+                                    commandId != null ? commandId : UUID.randomUUID().toString(),
+                                    party)
+                            .thenApply(prCid -> {
+                                LoanPrincipalRequestResult result = new LoanPrincipalRequestResult();
+                                result.setPrincipalRequestId(prCid.getContractId);
+                                return ResponseEntity.status(HttpStatus.CREATED).body(result);
+                            });
+                })
+        ));
+    }
+
+    @WithSpan
+    @GetMapping("/loans/funding-intents")
+    public CompletableFuture<ResponseEntity<List<LoanFundingIntent>>> listFundingIntents() {
+        var ctx = tracingCtx(logger, "listFundingIntents");
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
+            var byBorrower = damlRepository.findFundingIntentsByBorrower(party);
+            var byLender = damlRepository.findFundingIntentsByLender(party);
+            return byBorrower.thenCombine(byLender, (borrowerList, lenderList) -> {
+                var map = new HashMap<String, com.digitalasset.quickstart.pqs.Contract<FundingIntent>>();
+                borrowerList.forEach(c -> map.put(c.contractId.getContractId, c));
+                lenderList.forEach(c -> map.put(c.contractId.getContractId, c));
+                List<LoanFundingIntent> api = map.values().stream()
+                        .sorted(Comparator.comparing(c -> c.payload.getRequestedAt))
+                        .map(LoanApiImpl::toFundingIntentApi)
+                        .toList();
+                return ResponseEntity.ok(api);
+            });
+        }));
+    }
+
+    @WithSpan
+    @GetMapping("/loans/principal-requests")
+    public CompletableFuture<ResponseEntity<List<LoanPrincipalRequestSummary>>> listPrincipalRequests() {
+        var ctx = tracingCtx(logger, "listPrincipalRequests");
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
+                damlRepository.findLoanPrincipalRequestsByLender(party).thenApply(list -> {
+                    Instant now = Instant.now();
+                    List<LoanPrincipalRequestSummary> api = list.stream()
+                            .map(r -> toLoanPrincipalRequestApi(r, now))
+                            .toList();
+                    return ResponseEntity.ok(api);
+                })
+        ));
+    }
+
+    @WithSpan
+    @PostMapping("/loans/principal-requests/{contractId}:complete-funding")
+    @ResponseBody
+    public CompletableFuture<ResponseEntity<LoanFundResult>> completeLoanFunding(
+            @PathVariable("contractId") String contractId,
+            String commandId,
+            CompleteLoanFundingRequest request) {
+        var ctx = tracingCtx(logger, "completeLoanFunding", "contractId", contractId);
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
+            var choiceContextFut = tokenStandardProxy.getAllocationTransferContext(request.getAllocationContractId());
+            var principalFut = damlRepository.findLoanPrincipalRequestById(contractId);
+            return choiceContextFut.thenCombine(principalFut, (c, r) -> {
+                var choiceContext = ensurePresent(c, "Transfer context not found for allocation %s", request.getAllocationContractId());
+                var principal = ensurePresent(r, "LoanPrincipalRequest not found: %s", contractId);
+                String lenderParty = principal.payload.getLender.getParty;
+                if (!party.equals(lenderParty)) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            String.format("Only the lender (%s) can complete funding. You are logged in as %s.",
+                                    lenderParty, party));
+                }
+                TransferContext transferContext = prepareTransferContext(
+                        choiceContext.getDisclosedContracts(),
+                        Map.of(
+                                "AmuletRules", "amulet-rules",
+                                "OpenMiningRound", "open-round"
+                        )
+                );
+                LoanPrincipalRequest.LoanPrincipalRequest_CompleteFunding choice =
+                        new LoanPrincipalRequest.LoanPrincipalRequest_CompleteFunding(
+                                new ContractId<>(request.getAllocationContractId()),
+                                transferContext.extraArgs
+                        );
+                return ledger.exerciseAndGetResult(
+                                principal.contractId,
+                                choice,
+                                commandId != null ? commandId : UUID.randomUUID().toString(),
+                                transferContext.disclosedContracts,
+                                party)
+                        .thenApply(loanCid -> {
+                            LoanFundResult result = new LoanFundResult();
+                            result.setLoanId(loanCid.getContractId);
+                            return ResponseEntity.ok(result);
+                        });
+            }).thenCompose(x -> x);
+        }));
+    }
+
+    @WithSpan
+    @PostMapping("/loans/{contractId}:request-repayment")
+    @ResponseBody
+    public CompletableFuture<ResponseEntity<LoanRepaymentRequestResult>> requestLoanRepayment(
+            @PathVariable("contractId") String contractId,
+            String commandId,
+            RequestRepaymentRequest request) {
+        var ctx = tracingCtx(logger, "requestLoanRepayment", "contractId", contractId);
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
+            var loanFut = damlRepository.findLoanById(contractId);
+            var adminIdFut = tokenStandardProxy.getRegistryAdminId();
+            return loanFut.thenCombine(adminIdFut, (optLoan, adminId) -> {
+                var loan = ensurePresent(optLoan, "Loan not found: %s", contractId);
+                String borrowerParty = loan.payload.getBorrower.getParty;
+                if (!party.equals(borrowerParty)) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            String.format("Only the borrower (%s) can request repayment. You are logged in as %s.",
+                                    borrowerParty, party));
+                }
+                String requestId = request.getRequestId().isPresent() && !request.getRequestId().get().isBlank()
+                        ? request.getRequestId().get()
+                        : UUID.randomUUID().toString();
+                Duration prepareDelta = request.getPrepareUntilDuration().isPresent()
+                        ? Duration.parse(request.getPrepareUntilDuration().get())
+                        : Duration.ofHours(2);
+                Duration settleDelta = request.getSettleBeforeDuration().isPresent()
+                        ? Duration.parse(request.getSettleBeforeDuration().get())
+                        : Duration.ofHours(24);
+                Instant now = Instant.now();
+                var choice = new Loan.Loan_RequestRepayment(
+                        requestId,
+                        new InstrumentId(new Party(adminId), "Amulet"),
+                        now.plus(prepareDelta),
+                        now.plus(settleDelta),
+                        request.getDescription().isPresent() ? request.getDescription().get() : "Token-based loan repayment"
+                );
+                return ledger.exerciseAndGetResult(
+                                loan.contractId,
+                                choice,
+                                commandId != null ? commandId : UUID.randomUUID().toString(),
+                                party)
+                        .thenApply(rrCid -> {
+                            LoanRepaymentRequestResult result = new LoanRepaymentRequestResult();
+                            result.setRepaymentRequestId(rrCid.getContractId);
+                            return ResponseEntity.status(HttpStatus.CREATED).body(result);
+                        });
+            }).thenCompose(x -> x);
+        }));
+    }
+
+    @WithSpan
+    @GetMapping("/loans/repayment-requests")
+    public CompletableFuture<ResponseEntity<List<LoanRepaymentRequestSummary>>> listRepaymentRequests() {
+        var ctx = tracingCtx(logger, "listRepaymentRequests");
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
+            var byBorrower = damlRepository.findLoanRepaymentRequestsByBorrower(party);
+            var byLender = damlRepository.findLoanRepaymentRequestsByLender(party);
+            return byBorrower.thenCombine(byLender, (borrowerList, lenderList) -> {
+                var map = new HashMap<String, LoanRepaymentRequestSummary>();
+                Instant now = Instant.now();
+                borrowerList.forEach(c -> map.put(c.contractId.getContractId, toLoanRepaymentRequestApi(c, Optional.empty(), now)));
+                lenderList.forEach(c -> map.put(c.repaymentRequest().contractId.getContractId,
+                        toLoanRepaymentRequestApi(c.repaymentRequest(), c.allocationCid(), now)));
+                List<LoanRepaymentRequestSummary> api = map.values().stream()
+                        .sorted(Comparator.comparing(LoanRepaymentRequestSummary::getRequestedAt))
+                        .toList();
+                return ResponseEntity.ok(api);
+            });
+        }));
+    }
+
+    @WithSpan
+    @PostMapping("/loans/repayment-requests/{contractId}:complete-repayment")
+    @ResponseBody
+    public CompletableFuture<ResponseEntity<LoanRepaymentResult>> completeLoanRepayment(
+            @PathVariable("contractId") String contractId,
+            String commandId,
+            CompleteLoanRepaymentRequest request) {
+        var ctx = tracingCtx(logger, "completeLoanRepayment", "contractId", contractId);
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
+            var choiceContextFut = tokenStandardProxy.getAllocationTransferContext(request.getAllocationContractId());
+            var repaymentFut = damlRepository.findLoanRepaymentRequestById(contractId);
+            return choiceContextFut.thenCombine(repaymentFut, (c, r) -> {
+                var choiceContext = ensurePresent(c, "Transfer context not found for allocation %s", request.getAllocationContractId());
+                var repayment = ensurePresent(r, "LoanRepaymentRequest not found: %s", contractId);
+                String lenderParty = repayment.payload.getLender.getParty;
+                if (!party.equals(lenderParty)) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            String.format("Only the lender (%s) can complete repayment. You are logged in as %s.",
+                                    lenderParty, party));
+                }
+                TransferContext transferContext = prepareTransferContext(
+                        choiceContext.getDisclosedContracts(),
+                        Map.of(
+                                "AmuletRules", "amulet-rules",
+                                "OpenMiningRound", "open-round"
+                        )
+                );
+                LoanRepaymentRequest.LoanRepaymentRequest_CompleteRepayment choice =
+                        new LoanRepaymentRequest.LoanRepaymentRequest_CompleteRepayment(
+                                new ContractId<>(request.getAllocationContractId()),
+                                transferContext.extraArgs
+                        );
+                String cmdId = commandId != null ? commandId : UUID.randomUUID().toString();
+                return ledger.exerciseAndGetResult(
+                                repayment.contractId,
+                                choice,
+                                cmdId,
+                                transferContext.disclosedContracts,
+                                party)
+                        .thenCompose(_unused -> {
+                            // CompleteRepayment only does the token transfer; complete the loan separately
+                            ContractId<Loan> loanCid = new ContractId<>(repayment.payload.getLoanContractIdText);
+                            var completeChoice = new Loan.Loan_CompleteRepaymentReceived();
+                            return ledger.exerciseAndGetResult(
+                                            loanCid,
+                                            completeChoice,
+                                            UUID.randomUUID().toString(),
+                                            party)
+                                    .thenApply(tuple -> {
+                                        LoanRepaymentResult result = new LoanRepaymentResult();
+                                        result.setCreditProfileId(tuple.get_1.getContractId);
+                                        return ResponseEntity.ok(result);
+                                    });
+                        });
+            }).thenCompose(x -> x);
+        }));
+    }
+
     @Override
     @WithSpan
     public CompletableFuture<ResponseEntity<Void>> repayLoan(String contractId, String commandId) {
@@ -362,6 +679,75 @@ public class LoanApiImpl implements LoansApi {
         return api;
     }
 
+    private static LoanFundingIntent toFundingIntentApi(
+            com.digitalasset.quickstart.pqs.Contract<FundingIntent> c) {
+        var p = c.payload;
+        var api = new LoanFundingIntent();
+        api.setContractId(c.contractId.getContractId);
+        api.setRequestId(p.getRequestId);
+        api.setLender(p.getLender.getParty);
+        api.setBorrower(p.getBorrower.getParty);
+        api.setPrincipal(p.getPrincipal);
+        api.setInterestRate(p.getInterestRate);
+        api.setDurationDays(p.getDurationDays.intValue());
+        api.setPrepareUntil(toOffsetDateTime(p.getPrepareUntil));
+        api.setSettleBefore(toOffsetDateTime(p.getSettleBefore));
+        api.setRequestedAt(toOffsetDateTime(p.getRequestedAt));
+        api.setDescription(JsonNullable.of(p.getDescription));
+        api.setLoanRequestId(p.getLoanRequestId.getContractId);
+        api.setOfferContractId(p.getOfferContractId.getContractId);
+        api.setCreditProfileId(p.getCreditProfileId.getContractId);
+        return api;
+    }
+
+    private static LoanPrincipalRequestSummary toLoanPrincipalRequestApi(
+            DamlRepository.LoanPrincipalRequestWithAllocationCid c,
+            Instant now) {
+        var p = c.principalRequest().payload;
+        var api = new LoanPrincipalRequestSummary();
+        api.setContractId(c.principalRequest().contractId.getContractId);
+        api.setRequestId(p.getRequestId);
+        api.setLender(p.getLender.getParty);
+        api.setBorrower(p.getBorrower.getParty);
+        api.setPrincipal(p.getPrincipal);
+        api.setInterestRate(p.getInterestRate);
+        api.setDurationDays(p.getDurationDays.intValue());
+        api.setPrepareUntil(toOffsetDateTime(p.getPrepareUntil));
+        api.setSettleBefore(toOffsetDateTime(p.getSettleBefore));
+        api.setRequestedAt(toOffsetDateTime(p.getRequestedAt));
+        api.setDescription(JsonNullable.of(p.getDescription));
+        api.setLoanRequestId(p.getLoanRequestId.getContractId);
+        api.setOfferContractId(p.getOfferContractId.getContractId);
+        api.setCreditProfileId(p.getCreditProfileId.getContractId);
+        api.setPrepareDeadlinePassed(!p.getPrepareUntil.isAfter(now));
+        api.setSettleDeadlinePassed(!p.getSettleBefore.isAfter(now));
+        c.allocationCid().ifPresent(cid -> api.setAllocationCid(JsonNullable.of(cid.getContractId)));
+        return api;
+    }
+
+    private static LoanRepaymentRequestSummary toLoanRepaymentRequestApi(
+            com.digitalasset.quickstart.pqs.Contract<LoanRepaymentRequest> c,
+            Optional<ContractId<splice_api_token_allocation_v1.splice.api.token.allocationv1.Allocation>> allocationCid,
+            Instant now) {
+        var p = c.payload;
+        var api = new LoanRepaymentRequestSummary();
+        api.setContractId(c.contractId.getContractId);
+        api.setRequestId(p.getRequestId);
+        api.setLender(p.getLender.getParty);
+        api.setBorrower(p.getBorrower.getParty);
+        api.setRepaymentAmount(p.getRepaymentAmount);
+        api.setPrepareUntil(toOffsetDateTime(p.getPrepareUntil));
+        api.setSettleBefore(toOffsetDateTime(p.getSettleBefore));
+        api.setRequestedAt(toOffsetDateTime(p.getRequestedAt));
+        api.setDescription(JsonNullable.of(p.getDescription));
+        api.setLoanContractId(p.getLoanContractIdText);
+        api.setCreditProfileId(p.getCreditProfileId.getContractId);
+        api.setPrepareDeadlinePassed(!p.getPrepareUntil.isAfter(now));
+        api.setSettleDeadlinePassed(!p.getSettleBefore.isAfter(now));
+        allocationCid.ifPresent(cid -> api.setAllocationCid(JsonNullable.of(cid.getContractId)));
+        return api;
+    }
+
     @Override
     @WithSpan
     @GetMapping("/loans")
@@ -396,5 +782,70 @@ public class LoanApiImpl implements LoansApi {
             api.setStatus(org.openapitools.model.Loan.StatusEnum.ACTIVE);
         }
         return api;
+    }
+
+    private record TransferContext(ExtraArgs extraArgs, List<CommandsOuterClass.DisclosedContract> disclosedContracts) {
+    }
+
+    private TransferContext prepareTransferContext(
+            List<DisclosedContract> disclosedContracts,
+            Map<String, String> metaMap) {
+        var disclosures = disclosedContracts
+                .stream()
+                .map(this::toLedgerApiDisclosedContract)
+                .toList();
+        Map<String, AnyValue> choiceContextMap = disclosures
+                .stream()
+                .map(dc -> {
+                    var metaKey = metaMap.get(dc.getTemplateId().getEntityName());
+                    if (metaKey != null) {
+                        return Map.entry(metaKey, toAnyValueContractId(dc.getContractId()));
+                    } else {
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        return new TransferContext(
+                new ExtraArgs(new ChoiceContext(choiceContextMap), toTokenStandardMetadata(Map.of())),
+                disclosures
+        );
+    }
+
+    private CommandsOuterClass.DisclosedContract toLedgerApiDisclosedContract(DisclosedContract dc) {
+        ValueOuterClass.Identifier templateId = parseTemplateIdentifier(dc.getTemplateId());
+        byte[] blob = java.util.Base64.getDecoder().decode(dc.getCreatedEventBlob());
+
+        return CommandsOuterClass.DisclosedContract.newBuilder().setTemplateId(templateId).setContractId(dc.getContractId())
+                .setCreatedEventBlob(ByteString.copyFrom(blob)).build();
+    }
+
+    private static ValueOuterClass.Identifier parseTemplateIdentifier(String templateIdStr) {
+        String[] parts = templateIdStr.split(":");
+        if (parts.length < 3) {
+            throw new IllegalArgumentException("Invalid templateId format: " + templateIdStr);
+        }
+        String packageId = parts[0];
+        String moduleName = parts[1];
+        StringBuilder entityNameBuilder = new StringBuilder();
+        for (int i = 2; i < parts.length; i++) {
+            if (i > 2) {
+                entityNameBuilder.append(":");
+            }
+            entityNameBuilder.append(parts[i]);
+        }
+        String entityName = entityNameBuilder.toString();
+
+        return ValueOuterClass.Identifier.newBuilder().setPackageId(packageId).setModuleName(moduleName)
+                .setEntityName(entityName).build();
+    }
+
+    private static AnyValue toAnyValueContractId(String contractId) {
+        return new AnyValue.AnyValue_AV_ContractId(new ContractId<>(contractId));
+    }
+
+    private static splice_api_token_metadata_v1.splice.api.token.metadatav1.Metadata toTokenStandardMetadata(
+            Map<String, String> meta) {
+        return new splice_api_token_metadata_v1.splice.api.token.metadatav1.Metadata(meta);
     }
 }

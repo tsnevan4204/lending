@@ -25,7 +25,7 @@ tasks.register<Exec>("compileDaml") {
 }
 
 tasks.register<Exec>("testDaml") {
-    dependsOn("verifyDamlSdkVersion")
+    dependsOn("verifyDamlSdkVersion", "compileDaml")
     val sdkVars = computeSdkVariables()
     val requiredVersion = sdkVars["damlSdkVersion"] as String
     commandLine("daml", "test", "--project-root", "licensing-tests")
