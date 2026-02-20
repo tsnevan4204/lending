@@ -85,6 +85,10 @@ public class LoanRequestsApiImpl implements LoanRequestsApi {
                                                                 for (var req : platformRequests) {
                                                                     String key = req.payload.getBorrower.getParty + "|" + req.payload.getAmount + "|" + (req.payload.getDurationDays != null ? req.payload.getDurationDays.longValue() : "") + "|" + (req.payload.getPurpose != null ? req.payload.getPurpose : "");
                                                                     if (!disclosedKeys.contains(key)) {
+                                                                        // Skip disclosing a request to the borrower who created it
+                                                                        if (req.payload.getBorrower.getParty.equals(party)) {
+                                                                            continue;
+                                                                        }
                                                                         var choice = new quickstart_licensing.loan.loanrequest.LoanRequest
                                                                                 .LoanRequest_DiscloseToLender(new Party(party));
                                                                         discloseFutures.add(
@@ -92,7 +96,12 @@ public class LoanRequestsApiImpl implements LoanRequestsApi {
                                                                                         req.contractId,
                                                                                         choice,
                                                                                         UUID.randomUUID().toString(),
-                                                                                        appProviderPartyId));
+                                                                                        appProviderPartyId)
+                                                                                        .exceptionally(ex -> {
+                                                                                            logger.warn("[listLoanRequests] failed to disclose request={} to party={}: {}",
+                                                                                                    req.contractId.getContractId, party, ex.getMessage());
+                                                                                            return null;
+                                                                                        }));
                                                                     }
                                                                 }
                                                                 return CompletableFuture.allOf(discloseFutures.toArray(CompletableFuture[]::new))

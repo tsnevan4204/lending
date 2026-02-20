@@ -16,6 +16,7 @@ import io.opentelemetry.instrumentation.annotations.WithSpan;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import org.openapitools.model.CreditProfile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,12 +71,13 @@ public class CreditProfileApiImpl implements CreditProfileApi {
                                                             UUID.randomUUID().toString(),
                                                             party)
                                                     .thenCompose(v -> {
-                                                        logger.debug("[getCreditProfile] ledger create succeeded, re-querying PQS");
-                                                        return damlRepository.findActiveCreditProfilesByBorrower(party);
+                                                        logger.debug("[getCreditProfile] ledger create succeeded, waiting for PQS indexing then re-querying");
+                                                        // PQS may not have indexed the new contract yet; retry up to 3 times with backoff.
+                                                        return retryQueryWithBackoff(party, 3, 500);
                                                     })
                                                     .thenApply(newList -> {
                                                         if (newList.isEmpty()) {
-                                                            logger.warn("[getCreditProfile] re-query after create returned empty");
+                                                            logger.warn("[getCreditProfile] re-query after create returned empty after retries");
                                                             return ResponseEntity.status(HttpStatus.NOT_FOUND).body((CreditProfile) null);
                                                         }
                                                         return toCreditProfileResponse(newList.get(0));
@@ -89,6 +91,20 @@ public class CreditProfileApiImpl implements CreditProfileApi {
                                     }));
             return future;
         });
+    }
+
+    private CompletableFuture<java.util.List<com.digitalasset.quickstart.pqs.Contract<quickstart_licensing.loan.creditprofile.CreditProfile>>>
+            retryQueryWithBackoff(String party, int attemptsLeft, long delayMs) {
+        return CompletableFuture.supplyAsync(() -> null, CompletableFuture.delayedExecutor(delayMs, TimeUnit.MILLISECONDS))
+                .thenCompose(ignored -> damlRepository.findActiveCreditProfilesByBorrower(party))
+                .thenCompose(list -> {
+                    if (!list.isEmpty() || attemptsLeft <= 1) {
+                        logger.debug("[getCreditProfile] PQS re-query returned {} result(s) (attempts remaining: {})", list.size(), attemptsLeft - 1);
+                        return CompletableFuture.completedFuture(list);
+                    }
+                    logger.debug("[getCreditProfile] PQS still empty, retrying in {}ms ({} attempts left)", delayMs * 2, attemptsLeft - 1);
+                    return retryQueryWithBackoff(party, attemptsLeft - 1, delayMs * 2);
+                });
     }
 
     private static ResponseEntity<CreditProfile> toCreditProfileResponse(

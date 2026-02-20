@@ -99,6 +99,21 @@ public class TenantPropertiesRepository {
     }
 
     /**
+     * Update the partyId (and optionally walletUrl) of an existing tenant.
+     * Used when the backend starts before onboarding completes and the partyId needs to be set later.
+     */
+    public void updateTenantPartyId(String tenantId, String partyId, String walletUrl) {
+        TenantProperties props = tenants.get(tenantId);
+        if (props == null) {
+            throw new NoSuchElementException("No tenant found for tenantId = " + tenantId);
+        }
+        props.setPartyId(partyId);
+        if (walletUrl != null && !walletUrl.isBlank()) {
+            props.setWalletUrl(walletUrl);
+        }
+    }
+
+    /**
      * Remove a tenant’s extra properties
      */
     public void removeTenant(String tenantId) {

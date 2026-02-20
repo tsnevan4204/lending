@@ -89,7 +89,16 @@ public class AdminApiImpl implements AdminApi {
 
     private void ensureTenantIsUnique(TenantRegistrationRequest request) {
         Function<String, ResponseStatusException> conflictExc = msg -> new ResponseStatusException(HttpStatus.CONFLICT, msg);
-        if (tenantPropertiesRepository.getTenant(request.getTenantId()) != null) {
+        TenantPropertiesRepository.TenantProperties existing = tenantPropertiesRepository.getTenant(request.getTenantId());
+        if (existing != null) {
+            // Allow upsert when the existing tenant has a blank partyId (backend started before onboarding completed).
+            boolean existingPartyBlank = existing.getPartyId() == null || existing.getPartyId().isBlank();
+            boolean newPartyProvided = request.getPartyId() != null && !request.getPartyId().isBlank();
+            if (existingPartyBlank && newPartyProvided) {
+                logger.info("Tenant '{}' already exists with blank partyId — updating partyId to '{}'",
+                        request.getTenantId(), request.getPartyId());
+                return; // permit the update path
+            }
             throw conflictExc.apply("TenantId already exists");
         }
         if (auth.isOAuth2Enabled()) {
@@ -111,6 +120,10 @@ public class AdminApiImpl implements AdminApi {
 
     private void registerSharedSecretUsers(TenantRegistrationRequest request) {
         request.getUsers().forEach(user -> {
+            if (userDetailsManager.get().userExists(user)) {
+                logger.info("User '{}' already exists in UserDetailsManager — skipping creation", user);
+                return;
+            }
             logger.info("Creating user {} with roles {}", user, "USER");
             try {
                 userDetailsManager.get().createUser(
@@ -130,12 +143,18 @@ public class AdminApiImpl implements AdminApi {
     }
 
     private void persistTenantMetadata(TenantRegistrationRequest request) {
-        TenantPropertiesRepository.TenantProperties props = new TenantPropertiesRepository.TenantProperties();
-        props.setWalletUrl(request.getWalletUrl());
-        props.setPartyId(request.getPartyId());
-        props.setTenantId(request.getTenantId());
-        props.setUsers(request.getUsers());
-        tenantPropertiesRepository.addTenant(request.getTenantId(), props);
+        TenantPropertiesRepository.TenantProperties existing = tenantPropertiesRepository.getTenant(request.getTenantId());
+        if (existing != null) {
+            // Update the partyId (and walletUrl) of an existing tenant whose partyId was blank at startup.
+            tenantPropertiesRepository.updateTenantPartyId(request.getTenantId(), request.getPartyId(), request.getWalletUrl());
+        } else {
+            TenantPropertiesRepository.TenantProperties props = new TenantPropertiesRepository.TenantProperties();
+            props.setWalletUrl(request.getWalletUrl());
+            props.setPartyId(request.getPartyId());
+            props.setTenantId(request.getTenantId());
+            props.setUsers(request.getUsers());
+            tenantPropertiesRepository.addTenant(request.getTenantId(), props);
+        }
     }
 
     private TenantRegistration buildResponse(TenantRegistrationRequest request) {

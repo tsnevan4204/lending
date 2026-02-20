@@ -186,7 +186,11 @@ export function LenderDashboard({
 }) {
   const [offerDialog, setOfferDialog] = useState<LoanRequest | null>(null)
   const [bidDialogOpen, setBidDialogOpen] = useState(false)
-  const openRequests = requests.filter((r) => r.status === "open")
+  // Exclude the current party's own requests from the lender marketplace —
+  // a borrower should not be able to offer on their own requests.
+  const openRequests = requests.filter(
+    (r) => r.status === "open" && (!currentParty || r.borrower !== currentParty)
+  )
   // Filter by the real party ID when available; fall back to showing all if party is unknown
   const myLoans = currentParty
     ? loans.filter((l) => l.lender === currentParty)
