@@ -23,10 +23,10 @@ import Splice.Api.Token.AllocationV1 as Api.Token.AllocationV1
 template LoanOffer with
     lender : Party
     borrower : Party
-    loanRequestId : ContractId LoanRequest
     amount : Decimal
     interestRate : Decimal
     createdAt : Time
+    loanRequestId : ContractId LoanRequest
   where
     signatory lender
     observer borrower

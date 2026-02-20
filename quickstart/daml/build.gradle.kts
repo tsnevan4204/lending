@@ -38,8 +38,22 @@ tasks.register<com.digitalasset.transcode.codegen.java.gradle.JavaCodegenTask>("
     dependsOn("compileDaml")
 }
 
-tasks.named("build") {
+// Codegen emits a duplicate LoanPrincipalRequest in loan/loanprincipalrequest/ with wrong
+// Identifiers (Loan_LoanPrincipalRequest__*). The correct class is in loan/loanoffer/.
+// Remove the duplicate so compileJava only sees the correct one.
+tasks.register("removeDuplicateLoanPrincipalRequest") {
     dependsOn("codeGen")
+    doLast {
+        val duplicate = file("$rootDir/backend/build/generated-daml-bindings/quickstart_licensing/loan/loanprincipalrequest/LoanPrincipalRequest.java")
+        if (duplicate.exists()) {
+            duplicate.delete()
+            logger.lifecycle("Removed duplicate generated file: $duplicate")
+        }
+    }
+}
+
+tasks.named("build") {
+    dependsOn("codeGen", "removeDuplicateLoanPrincipalRequest")
 }
 
 // Helper function to compute SDK variables

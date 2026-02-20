@@ -219,10 +219,10 @@ public class LoanApiImpl implements LoansApi {
                                         LoanOffer template = new LoanOffer(
                                                 new Party(party),
                                                 forLender.payload.getBorrower,
-                                                forLender.payload.getRequestId,
                                                 amount,
                                                 rate,
-                                                now);
+                                                now,
+                                                forLender.payload.getRequestId);
                                         return ledger.create(template, commandId != null ? commandId : UUID.randomUUID().toString(), party)
                                                 .thenApply(v -> {
                                                     logger.info("[createLoanOffer] created offer from LoanRequestForLender party={} requestId={} amount={} rate={}", party, loanOfferCreate.getLoanRequestId(), amount, rate);
@@ -264,10 +264,10 @@ public class LoanApiImpl implements LoansApi {
                                                 LoanOffer template = new LoanOffer(
                                                         new Party(party),
                                                         req.payload.getBorrower,
-                                                        req.contractId,
                                                         amount,
                                                         rate,
-                                                        now);
+                                                        now,
+                                                        req.contractId);
                                                 return ledger.create(template, commandId != null ? commandId : UUID.randomUUID().toString(), party)
                                                         .thenApply(v -> {
                                                             logger.info("[createLoanOffer] created offer from LoanRequest party={} requestId={} amount={} rate={}", party, loanOfferCreate.getLoanRequestId(), amount, rate);

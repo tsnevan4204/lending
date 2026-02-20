@@ -148,8 +148,11 @@ SETUP_COMMAND := ./gradlew configureProfiles --no-daemon --console=plain --quiet
 build: $(FIRST_RUN_DEPENDENCY) build-frontend build-backend build-daml build-docker-images ## Build frontend, backend, Daml model and docker images
 
 .PHONY: build-frontend
-build-frontend: ## Build the frontend application
-	cd frontend && npm install && npm run build
+build-frontend: ## Build the frontend (Next.js static export) into frontend/dist
+	mkdir -p frontend/dist
+	cd frontend && npm ci 2>/dev/null || npm install
+	cd frontend && npm run build
+	cp -r frontend/out/. frontend/dist/
 
 .PHONY: build-backend
 build-backend: ## Build the backend service

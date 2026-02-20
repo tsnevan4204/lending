@@ -55,6 +55,16 @@ application {
     mainClass = "com.digitalasset.quickstart.App"
 }
 
+// Compose expects backend.tar (not backend-boot.tar); avoid backend.tar being created as a directory by Docker mount.
+tasks.named<org.gradle.api.tasks.bundling.Tar>("distTar") {
+    archiveFileName.set("backend.tar")
+    dependsOn("copyOtelAgentJar")
+    from(fileTree("$projectDir/build/otel-agent").filter { it.isFile }) {
+        into("backend")
+        rename(".*", "otel-agent.jar")
+    }
+}
+
 tasks.withType<Jar> {
     manifest {
         attributes["Main-Class"] = "com.digitalasset.quickstart.App"
@@ -68,6 +78,10 @@ tasks.register<Copy>("copyOtelAgentJar") {
     from(configurations.runtimeClasspath)
     into("$projectDir/build/otel-agent")
     include("**/*opentelemetry*javaagent*.jar")
+    // Docker can create mount targets as directories when the file is missing; remove any directory placeholders so the copy can create the file.
+    doFirst {
+        file("$projectDir/build/otel-agent").takeIf { it.exists() }?.listFiles()?.filter { it.isDirectory }?.forEach { it.deleteRecursively() }
+    }
 }
 
 tasks.named("build") {
