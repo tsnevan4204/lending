@@ -747,28 +747,6 @@ public class LoanApiImpl implements LoansApi {
         );
     }
 
-    /**
-     * Lender bids (order book). Returns empty array until DAML LenderBid template is implemented.
-     */
-    @WithSpan
-    @GetMapping("/lender-bids")
-    public CompletableFuture<ResponseEntity<List<org.openapitools.model.LenderBid>>> listLenderBids() {
-        return auth.asAuthenticatedParty(party ->
-                CompletableFuture.completedFuture(ResponseEntity.ok(List.of()))
-        );
-    }
-
-    /**
-     * Borrower asks (order book). Returns empty array until DAML BorrowerAsk template is implemented.
-     */
-    @WithSpan
-    @GetMapping("/borrower-asks")
-    public CompletableFuture<ResponseEntity<List<org.openapitools.model.BorrowerAsk>>> listBorrowerAsks() {
-        return auth.asAuthenticatedParty(party ->
-                CompletableFuture.completedFuture(ResponseEntity.ok(List.of()))
-        );
-    }
-
     /** List loan offers visible to the authenticated party (lender or borrower). Not in generated LoansApi; mapped explicitly. */
     @WithSpan
     @GetMapping("/loan-offers")

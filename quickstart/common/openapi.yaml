@@ -798,44 +798,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /lender-bids:
-    get:
-      tags: [Loans]
-      summary: List lender bids (order book) visible to the authenticated party
-      operationId: listLenderBids
-      responses:
-        '200':
-          description: List of lender bids
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/LenderBid'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '500':
-          $ref: '#/components/responses/InternalError'
-
-  /borrower-asks:
-    get:
-      tags: [Loans]
-      summary: List borrower asks (order book) visible to the authenticated party
-      operationId: listBorrowerAsks
-      responses:
-        '200':
-          description: List of borrower asks
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/BorrowerAsk'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '500':
-          $ref: '#/components/responses/InternalError'
-
   /credit-profile:
     get:
       tags: [Loans]
