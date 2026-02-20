@@ -159,20 +159,36 @@ public class LoanApiImpl implements LoansApi {
                             days,
                             loanRequestCreate.getPurpose() != null ? loanRequestCreate.getPurpose() : "",
                             now);
-                    return ledger.create(template, commandId != null ? commandId : UUID.randomUUID().toString(), party)
-                            .thenApply(v -> {
-                                logger.info("[createLoanRequest] SUCCESS party={} amount={} rate={} days={}", party, amount, rate, daysInt);
-                                // Proactively disclose to all known lenders
+                    String cmdId = commandId != null ? commandId : UUID.randomUUID().toString();
+                    String purpose = loanRequestCreate.getPurpose() != null ? loanRequestCreate.getPurpose() : "";
+                    return ledger.create(template, cmdId, party)
+                            .thenCompose(v -> {
+                                logger.info("[createLoanRequest] ledger write done party={} amount={} rate={} days={}", party, amount, rate, daysInt);
                                 discloseToAllLenders(party, auth.getAppProviderPartyId());
-                                org.openapitools.model.LoanRequest body = new org.openapitools.model.LoanRequest();
-                                body.setContractId("");
-                                body.setBorrower(party);
-                                body.setAmount(amount);
-                                body.setInterestRate(rate);
-                                body.setDurationDays(daysInt);
-                                body.setPurpose(loanRequestCreate.getPurpose());
-                                body.setCreatedAt(toOffsetDateTime(now));
-                                return ResponseEntity.status(HttpStatus.CREATED).body(body);
+                                // Wait 1s for PQS to index the new contract, then resolve the real contractId
+                                CompletableFuture<Void> delay = new CompletableFuture<>();
+                                CompletableFuture.delayedExecutor(1, java.util.concurrent.TimeUnit.SECONDS)
+                                        .execute(() -> delay.complete(null));
+                                return delay.thenCompose(_unused ->
+                                        damlRepository.findActiveLoanRequestsByBorrower(party)
+                                                .thenApply(reqs -> {
+                                                    String cid = reqs.stream()
+                                                            .filter(r -> purpose.equals(r.payload.getPurpose)
+                                                                    && amount.compareTo(r.payload.getAmount) == 0)
+                                                            .map(r -> r.contractId.getContractId)
+                                                            .findFirst()
+                                                            .orElse("");
+                                                    logger.info("[createLoanRequest] resolved contractId={}", cid);
+                                                    org.openapitools.model.LoanRequest body = new org.openapitools.model.LoanRequest();
+                                                    body.setContractId(cid);
+                                                    body.setBorrower(party);
+                                                    body.setAmount(amount);
+                                                    body.setInterestRate(rate);
+                                                    body.setDurationDays(daysInt);
+                                                    body.setPurpose(purpose);
+                                                    body.setCreatedAt(toOffsetDateTime(now));
+                                                    return ResponseEntity.status(HttpStatus.CREATED).body(body);
+                                                }));
                             })
                             .exceptionally(ex -> {
                                 logger.error("[createLoanRequest] FAILED party={} amount={}", party, amount, ex);
@@ -223,17 +239,33 @@ public class LoanApiImpl implements LoansApi {
                                                 rate,
                                                 now,
                                                 forLender.payload.getRequestId);
-                                        return ledger.create(template, commandId != null ? commandId : UUID.randomUUID().toString(), party)
-                                                .thenApply(v -> {
-                                                    logger.info("[createLoanOffer] created offer from LoanRequestForLender party={} requestId={} amount={} rate={}", party, loanOfferCreate.getLoanRequestId(), amount, rate);
-                                                    org.openapitools.model.LoanOffer body = new org.openapitools.model.LoanOffer();
-                                                    body.setContractId("");
-                                                    body.setLender(party);
-                                                    body.setBorrower(forLender.payload.getBorrower.getParty);
-                                                    body.setAmount(amount);
-                                                    body.setInterestRate(rate);
-                                                    body.setCreatedAt(toOffsetDateTime(now));
-                                                    return ResponseEntity.status(HttpStatus.CREATED).body(body);
+                                        String offerCmdId = commandId != null ? commandId : UUID.randomUUID().toString();
+                                        String borrowerPartyForLender = forLender.payload.getBorrower.getParty;
+                                        final BigDecimal finalAmount = amount;
+                                        return ledger.create(template, offerCmdId, party)
+                                                .thenCompose(v -> {
+                                                    logger.info("[createLoanOffer] ledger write done from LoanRequestForLender party={} amount={} rate={}", party, finalAmount, rate);
+                                                    CompletableFuture<Void> delay = new CompletableFuture<>();
+                                                    CompletableFuture.delayedExecutor(1, java.util.concurrent.TimeUnit.SECONDS).execute(() -> delay.complete(null));
+                                                    return delay.thenCompose(_unused ->
+                                                            damlRepository.findActiveLoanOffersByLenderOrBorrower(party)
+                                                                    .thenApply(offers -> {
+                                                                        String cid = offers.stream()
+                                                                                .filter(o -> party.equals(o.payload.getLender.getParty)
+                                                                                        && borrowerPartyForLender.equals(o.payload.getBorrower.getParty)
+                                                                                        && finalAmount.compareTo(o.payload.getAmount) == 0)
+                                                                                .map(o -> o.contractId.getContractId)
+                                                                                .findFirst().orElse("");
+                                                                        logger.info("[createLoanOffer] resolved contractId={}", cid);
+                                                                        org.openapitools.model.LoanOffer body = new org.openapitools.model.LoanOffer();
+                                                                        body.setContractId(cid);
+                                                                        body.setLender(party);
+                                                                        body.setBorrower(borrowerPartyForLender);
+                                                                        body.setAmount(finalAmount);
+                                                                        body.setInterestRate(rate);
+                                                                        body.setCreatedAt(toOffsetDateTime(now));
+                                                                        return ResponseEntity.status(HttpStatus.CREATED).body(body);
+                                                                    }));
                                                 });
                                     }
                                     // Fallback: client may have sent LoanRequest id (e.g. from borrower flow or resolved id).
@@ -242,14 +274,23 @@ public class LoanApiImpl implements LoansApi {
                                                 if (optReq.isPresent()) {
                                                     return CompletableFuture.completedFuture(optReq);
                                                 }
-                                                logger.warn("[createLoanOffer] LoanRequest not found for id={}, trying single-platform-request fallback", loanOfferCreate.getLoanRequestId());
+                                                logger.warn("[createLoanOffer] LoanRequest not found for id={}, trying platform-request-list fallback", loanOfferCreate.getLoanRequestId());
+                                                final String wantedId = loanOfferCreate.getLoanRequestId();
                                                 return damlRepository.findActiveLoanRequestsByPlatform(appProviderPartyId)
                                                         .thenApply(platformList -> {
-                                                            if (platformList.size() == 1) {
-                                                                logger.info("[createLoanOffer] using single platform request as fallback");
-                                                                return Optional.of(platformList.get(0));
-                                                            }
-                                                            return Optional.<com.digitalasset.quickstart.pqs.Contract<LoanRequest>>empty();
+                                                            // Match by exact contractId or suffix
+                                                            return platformList.stream()
+                                                                    .filter(r -> {
+                                                                        String cid = r.contractId.getContractId;
+                                                                        return cid.equals(wantedId)
+                                                                                || cid.endsWith(wantedId)
+                                                                                || wantedId.endsWith(cid);
+                                                                    })
+                                                                    .findFirst()
+                                                                    .map(r -> {
+                                                                        logger.info("[createLoanOffer] matched platform request by contractId");
+                                                                        return r;
+                                                                    });
                                                         });
                                             })
                                             .thenCompose(optReq -> {
@@ -268,17 +309,33 @@ public class LoanApiImpl implements LoansApi {
                                                         rate,
                                                         now,
                                                         req.contractId);
-                                                return ledger.create(template, commandId != null ? commandId : UUID.randomUUID().toString(), party)
-                                                        .thenApply(v -> {
-                                                            logger.info("[createLoanOffer] created offer from LoanRequest party={} requestId={} amount={} rate={}", party, loanOfferCreate.getLoanRequestId(), amount, rate);
-                                                            org.openapitools.model.LoanOffer body = new org.openapitools.model.LoanOffer();
-                                                            body.setContractId("");
-                                                            body.setLender(party);
-                                                            body.setBorrower(req.payload.getBorrower.getParty);
-                                                            body.setAmount(amount);
-                                                            body.setInterestRate(rate);
-                                                            body.setCreatedAt(toOffsetDateTime(now));
-                                                            return ResponseEntity.status(HttpStatus.CREATED).body(body);
+                                                String fallbackCmdId = commandId != null ? commandId : UUID.randomUUID().toString();
+                                                String borrowerPartyFallback = req.payload.getBorrower.getParty;
+                                                final BigDecimal finalAmountFallback = amount;
+                                                return ledger.create(template, fallbackCmdId, party)
+                                                        .thenCompose(v -> {
+                                                            logger.info("[createLoanOffer] ledger write done from LoanRequest party={} amount={} rate={}", party, finalAmountFallback, rate);
+                                                            CompletableFuture<Void> delay = new CompletableFuture<>();
+                                                            CompletableFuture.delayedExecutor(1, java.util.concurrent.TimeUnit.SECONDS).execute(() -> delay.complete(null));
+                                                            return delay.thenCompose(_unused ->
+                                                                    damlRepository.findActiveLoanOffersByLenderOrBorrower(party)
+                                                                            .thenApply(offers -> {
+                                                                                String cid = offers.stream()
+                                                                                        .filter(o -> party.equals(o.payload.getLender.getParty)
+                                                                                                && borrowerPartyFallback.equals(o.payload.getBorrower.getParty)
+                                                                                                && finalAmountFallback.compareTo(o.payload.getAmount) == 0)
+                                                                                        .map(o -> o.contractId.getContractId)
+                                                                                        .findFirst().orElse("");
+                                                                                logger.info("[createLoanOffer] resolved contractId={}", cid);
+                                                                                org.openapitools.model.LoanOffer body = new org.openapitools.model.LoanOffer();
+                                                                                body.setContractId(cid);
+                                                                                body.setLender(party);
+                                                                                body.setBorrower(borrowerPartyFallback);
+                                                                                body.setAmount(finalAmountFallback);
+                                                                                body.setInterestRate(rate);
+                                                                                body.setCreatedAt(toOffsetDateTime(now));
+                                                                                return ResponseEntity.status(HttpStatus.CREATED).body(body);
+                                                                            }));
                                                         });
                                             });
                                 }));
@@ -643,6 +700,73 @@ public class LoanApiImpl implements LoansApi {
                                             });
                                 }));
         });
+    }
+
+    /**
+     * Aggregate platform statistics computed from all active Loan contracts visible to the PQS node.
+     * Returns live on-chain data: TVL, loan count, average rate, unique parties.
+     */
+    @WithSpan
+    @GetMapping("/platform-stats")
+    public CompletableFuture<ResponseEntity<org.openapitools.model.PlatformStats>> getPlatformStats() {
+        var ctx = tracingCtx(logger, "getPlatformStats");
+        return auth.asAuthenticatedParty(party ->
+                traceServiceCallAsync(ctx, () ->
+                        damlRepository.findAllActiveLoans().thenApply(loans -> {
+                            var active = loans.stream()
+                                    .filter(c -> {
+                                        var s = c.payload.getStatus;
+                                        return s == null || s.toString().equals("Active");
+                                    })
+                                    .toList();
+                            double tvl = active.stream()
+                                    .mapToDouble(c -> c.payload.getPrincipal.doubleValue())
+                                    .sum();
+                            double avgRate = active.isEmpty() ? 0.0 : active.stream()
+                                    .mapToDouble(c -> c.payload.getInterestRate.doubleValue())
+                                    .average().orElse(0.0);
+                            long distinctLenders = active.stream()
+                                    .map(c -> c.payload.getLender.getParty)
+                                    .distinct().count();
+                            long distinctBorrowers = active.stream()
+                                    .map(c -> c.payload.getBorrower.getParty)
+                                    .distinct().count();
+
+                            org.openapitools.model.PlatformStats stats = new org.openapitools.model.PlatformStats();
+                            stats.setTotalValueLocked(BigDecimal.valueOf(tvl));
+                            stats.setTotalLoansOriginated(BigDecimal.valueOf(loans.size()));
+                            stats.setAverageInterestRate(BigDecimal.valueOf(avgRate));
+                            stats.setActiveLoans(active.size());
+                            stats.setTotalLenders((int) distinctLenders);
+                            stats.setTotalBorrowers((int) distinctBorrowers);
+                            logger.info("[getPlatformStats] tvl={} activeLoans={} lenders={} borrowers={}",
+                                    tvl, active.size(), distinctLenders, distinctBorrowers);
+                            return ResponseEntity.ok(stats);
+                        })
+                )
+        );
+    }
+
+    /**
+     * Lender bids (order book). Returns empty array until DAML LenderBid template is implemented.
+     */
+    @WithSpan
+    @GetMapping("/lender-bids")
+    public CompletableFuture<ResponseEntity<List<org.openapitools.model.LenderBid>>> listLenderBids() {
+        return auth.asAuthenticatedParty(party ->
+                CompletableFuture.completedFuture(ResponseEntity.ok(List.of()))
+        );
+    }
+
+    /**
+     * Borrower asks (order book). Returns empty array until DAML BorrowerAsk template is implemented.
+     */
+    @WithSpan
+    @GetMapping("/borrower-asks")
+    public CompletableFuture<ResponseEntity<List<org.openapitools.model.BorrowerAsk>>> listBorrowerAsks() {
+        return auth.asAuthenticatedParty(party ->
+                CompletableFuture.completedFuture(ResponseEntity.ok(List.of()))
+        );
     }
 
     /** List loan offers visible to the authenticated party (lender or borrower). Not in generated LoansApi; mapped explicitly. */

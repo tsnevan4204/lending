@@ -144,20 +144,27 @@ export function LenderDashboard({
   requests,
   loans,
   bids,
+  currentParty,
   onMakeOffer,
   onMarkDefault,
 }: {
   requests: LoanRequest[]
   loans: ActiveLoan[]
   bids: LenderBid[]
+  currentParty?: string
   onMakeOffer?: (payload: { loanRequestId: string; amount: number; interestRate: number }) => Promise<void>
   onMarkDefault?: (loanContractId: string) => Promise<void>
 }) {
   const [offerDialog, setOfferDialog] = useState<LoanRequest | null>(null)
   const [bidDialogOpen, setBidDialogOpen] = useState(false)
   const openRequests = requests.filter((r) => r.status === "open")
-  const myLoans = loans.filter((l) => l.lender === "lender")
-  const myBids = bids.filter((b) => b.lender === "lender")
+  // Filter by the real party ID when available; fall back to showing all if party is unknown
+  const myLoans = currentParty
+    ? loans.filter((l) => l.lender === currentParty)
+    : loans
+  const myBids = currentParty
+    ? bids.filter((b) => b.lender === currentParty)
+    : bids
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="flex flex-col gap-8">

@@ -145,6 +145,7 @@ export function BorrowerDashboard({
   requests,
   offers,
   loans,
+  currentParty,
   creditProfileId,
   onCreateRequest,
   onAcceptOffer,
@@ -153,14 +154,20 @@ export function BorrowerDashboard({
   requests: LoanRequest[]
   offers: LoanOffer[]
   loans: ActiveLoan[]
+  currentParty?: string
   creditProfileId?: string
   onCreateRequest?: (payload: { amount: number; interestRate: number; duration: number; purpose: string }) => Promise<void>
   onAcceptOffer?: (offerContractId: string, creditProfileId: string) => Promise<void>
   onRepay?: (loanContractId: string) => Promise<void>
 }) {
   const [dialogOpen, setDialogOpen] = useState(false)
-  const myRequests = requests.filter((r) => r.borrower === "app-user")
-  const myLoans = loans.filter((l) => l.borrower === "app-user")
+  // Filter by the real party ID when available; fall back to showing all if party is unknown
+  const myRequests = currentParty
+    ? requests.filter((r) => r.borrower === currentParty)
+    : requests
+  const myLoans = currentParty
+    ? loans.filter((l) => l.borrower === currentParty)
+    : loans
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="flex flex-col gap-8">

@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
+import { LogOut, Loader2 } from "lucide-react"
 import { AppSidebar } from "@/components/denver/app-sidebar"
 import { LoginScreen } from "@/components/denver/login-screen"
 import { OverviewDashboard } from "@/components/denver/overview-dashboard"
@@ -13,12 +14,15 @@ import { PrivacyView } from "@/components/denver/privacy-view"
 import { useDenverData } from "@/hooks/use-denver-data"
 
 export default function DenverLendingApp() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [role, setRole] = useState<"borrower" | "lender">("borrower")
   const [activeView, setActiveView] = useState("overview")
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   const {
+    authStatus,
+    currentUser,
+    login,
+    logout,
     requests,
     offers,
     loans,
@@ -28,7 +32,6 @@ export default function DenverLendingApp() {
     platformStats,
     loading,
     error,
-    useApi,
     createLoanRequest,
     createLoanOffer,
     fundLoan,
@@ -36,19 +39,39 @@ export default function DenverLendingApp() {
     markLoanDefault,
   } = useDenverData(role)
 
-  function handleLogin(selectedRole: "borrower" | "lender") {
-    setRole(selectedRole)
-    setIsLoggedIn(true)
-    setActiveView(selectedRole === "borrower" ? "borrower" : "lender")
+  // ---- loading / auth states ----
+
+  if (authStatus === "checking") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <Loader2 className="size-6 animate-spin" />
+          <span className="text-sm">Connecting to Canton ledger…</span>
+        </div>
+      </div>
+    )
   }
+
+  if (authStatus === "unauthenticated" || authStatus === "no-backend") {
+    return (
+      <LoginScreen
+        noBackend={authStatus === "no-backend"}
+        login={login}
+        onLogin={(selectedRole) => {
+          setRole(selectedRole)
+          setActiveView(selectedRole === "borrower" ? "borrower" : "lender")
+        }}
+      />
+    )
+  }
+
+  // ---- authenticated ----
+
+  const displayName = currentUser?.name ?? (role === "borrower" ? "app-user" : "lender")
+  const partyId = currentUser?.party ?? "—"
 
   function handleLogout() {
-    setIsLoggedIn(false)
-    setActiveView("overview")
-  }
-
-  if (!isLoggedIn) {
-    return <LoginScreen onLogin={handleLogin} />
+    logout()
   }
 
   return (
@@ -79,22 +102,54 @@ export default function DenverLendingApp() {
             <span className="text-sm text-muted-foreground">
               Canton Ledger
             </span>
+            {loading && <Loader2 className="size-3 animate-spin text-muted-foreground ml-1" />}
           </div>
           <div className="ml-auto flex items-center gap-4">
-            {error && <span className="text-xs text-destructive">{error}</span>}
-            {useApi && <span className="text-[10px] text-muted-foreground bg-primary/10 px-1.5 py-0.5 rounded">API</span>}
-            <span className="text-sm text-muted-foreground">
-              {role === "borrower" ? "app-user" : "lender"}
-            </span>
-            <motion.div
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-              className="size-8 rounded-full bg-secondary flex items-center justify-center cursor-pointer transition-colors duration-200"
-            >
-              <span className="text-foreground text-xs font-semibold">
-                {role === "borrower" ? "B" : "L"}
+            {error && (
+              <span className="text-xs text-destructive max-w-xs truncate" title={error}>
+                {error}
               </span>
-            </motion.div>
+            )}
+            {/* Role switcher */}
+            <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
+              {(["borrower", "lender"] as const).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => {
+                    setRole(r)
+                    setActiveView(r === "borrower" ? "borrower" : "lender")
+                  }}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    role === r
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {r.charAt(0).toUpperCase() + r.slice(1)}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="size-7 rounded-full bg-secondary flex items-center justify-center">
+                <span className="text-foreground text-[10px] font-semibold">
+                  {displayName.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div className="hidden sm:flex flex-col leading-none">
+                <span className="text-xs font-medium text-foreground">{displayName}</span>
+                <span className="text-[10px] text-muted-foreground truncate max-w-[140px]" title={partyId}>
+                  {partyId.length > 20 ? partyId.slice(0, 20) + "…" : partyId}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              title="Sign out"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors"
+            >
+              <LogOut className="size-3.5" />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
           </div>
         </motion.header>
 
@@ -121,6 +176,7 @@ export default function DenverLendingApp() {
                   requests={requests}
                   offers={offers}
                   loans={loans}
+                  currentParty={partyId}
                   creditProfileId={creditProfile.contractId}
                   onCreateRequest={createLoanRequest}
                   onAcceptOffer={fundLoan}
@@ -137,6 +193,7 @@ export default function DenverLendingApp() {
                 requests={requests}
                 loans={loans}
                 bids={bids}
+                currentParty={partyId}
                 onMakeOffer={createLoanOffer}
                 onMarkDefault={markLoanDefault}
               />

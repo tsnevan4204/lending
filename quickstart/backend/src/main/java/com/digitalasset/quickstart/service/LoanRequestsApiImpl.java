@@ -108,8 +108,17 @@ public class LoanRequestsApiImpl implements LoanRequestsApi {
                                                 return CompletableFuture.completedFuture(ResponseEntity.ok(result));
                                             });
                                 }
-                                logger.info("[listLoanRequests] party={} (platform) returning {} request(s)", party, result.size());
-                                return CompletableFuture.completedFuture(ResponseEntity.ok(result));
+                                // Platform party acts as lender too: return ALL active requests it observes as platformOperator.
+                                return damlRepository.findActiveLoanRequestsByPlatform(appProviderPartyId)
+                                        .thenApply(platformRequests -> {
+                                            for (var req : platformRequests) {
+                                                if (seenIds.add(req.contractId.getContractId)) {
+                                                    result.add(toLoanRequestApi(req));
+                                                }
+                                            }
+                                            logger.info("[listLoanRequests] party={} (platform/lender) returning {} request(s)", party, result.size());
+                                            return ResponseEntity.ok(result);
+                                        });
                             }));
         });
     }

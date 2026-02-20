@@ -780,6 +780,61 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /platform-stats:
+    get:
+      tags: [Loans]
+      summary: Aggregate platform statistics computed from on-ledger data
+      operationId: getPlatformStats
+      responses:
+        '200':
+          description: Platform statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /lender-bids:
+    get:
+      tags: [Loans]
+      summary: List lender bids (order book) visible to the authenticated party
+      operationId: listLenderBids
+      responses:
+        '200':
+          description: List of lender bids
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LenderBid'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /borrower-asks:
+    get:
+      tags: [Loans]
+      summary: List borrower asks (order book) visible to the authenticated party
+      operationId: listBorrowerAsks
+      responses:
+        '200':
+          description: List of borrower asks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BorrowerAsk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /credit-profile:
     get:
       tags: [Loans]
@@ -1531,6 +1586,73 @@ components:
           type: integer
         defaultedLoans:
           type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    PlatformStats:
+      type: object
+      required: [ totalValueLocked, totalLoansOriginated, averageInterestRate, activeLoans, totalLenders, totalBorrowers ]
+      properties:
+        totalValueLocked:
+          type: number
+          description: Sum of principals for all currently active loans
+        totalLoansOriginated:
+          type: number
+          description: Total number of loans ever created (active + repaid + defaulted)
+        averageInterestRate:
+          type: number
+          description: Average interest rate across all active loans
+        activeLoans:
+          type: integer
+          description: Number of currently active loans
+        totalLenders:
+          type: integer
+          description: Number of distinct lender parties with active loans
+        totalBorrowers:
+          type: integer
+          description: Number of distinct borrower parties with active loans
+
+    LenderBid:
+      type: object
+      required: [ contractId, lender, amount, minInterestRate, maxDurationDays, remainingAmount, status, createdAt ]
+      properties:
+        contractId:
+          type: string
+        lender:
+          type: string
+        amount:
+          type: number
+        minInterestRate:
+          type: number
+        maxDurationDays:
+          type: integer
+        remainingAmount:
+          type: number
+        status:
+          type: string
+          enum: [ open, partial, filled, cancelled ]
+        createdAt:
+          type: string
+          format: date-time
+
+    BorrowerAsk:
+      type: object
+      required: [ contractId, borrower, amount, maxInterestRate, durationDays, status, createdAt ]
+      properties:
+        contractId:
+          type: string
+        borrower:
+          type: string
+        amount:
+          type: number
+        maxInterestRate:
+          type: number
+        durationDays:
+          type: integer
+        status:
+          type: string
+          enum: [ open, filled, cancelled ]
         createdAt:
           type: string
           format: date-time
