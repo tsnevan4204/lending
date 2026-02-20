@@ -36,9 +36,6 @@ import quickstart_licensing.loan.marketmaker.LenderBid;
 import quickstart_licensing.loan.marketmaker.BorrowerAsk;
 import quickstart_licensing.loan.marketmaker.MatchingEngine;
 import quickstart_licensing.loan.marketmaker.MatchedLoanProposal;
-import quickstart_licensing.loan.orderbook.BorrowOrder;
-import quickstart_licensing.loan.orderbook.LendOrder;
-import quickstart_licensing.loan.orderbook.MatchedDeal;
 import splice_api_token_allocation_request_v1.splice.api.token.allocationrequestv1.AllocationRequest;
 import splice_api_token_allocation_v1.splice.api.token.allocationv1.Allocation;
 
@@ -571,37 +568,4 @@ public class DamlRepository {
                 .exceptionally(ex -> handlePqsTemplateNotFound(ex, "MatchedLoanProposal"));
     }
 
-    // --- Order Book (Decentralized Matching Engine) ---
-
-    public CompletableFuture<List<Contract<BorrowOrder>>> findActiveBorrowOrders() {
-        return pqs.active(BorrowOrder.class)
-                .exceptionally(ex -> handlePqsTemplateNotFound(ex, "BorrowOrder"));
-    }
-
-    public CompletableFuture<List<Contract<LendOrder>>> findActiveLendOrders() {
-        return pqs.active(LendOrder.class)
-                .exceptionally(ex -> handlePqsTemplateNotFound(ex, "LendOrder"));
-    }
-
-    public CompletableFuture<Optional<Contract<BorrowOrder>>> findBorrowOrderById(String contractId) {
-        return pqs.contractByContractId(BorrowOrder.class, contractId)
-                .exceptionally(ex -> handlePqsTemplateNotFoundOptional(ex, "BorrowOrder"));
-    }
-
-    public CompletableFuture<Optional<Contract<LendOrder>>> findLendOrderById(String contractId) {
-        return pqs.contractByContractId(LendOrder.class, contractId)
-                .exceptionally(ex -> handlePqsTemplateNotFoundOptional(ex, "LendOrder"));
-    }
-
-    public CompletableFuture<List<Contract<MatchedDeal>>> findMatchedDeals(String party) {
-        return pqs.activeWhere(MatchedDeal.class,
-                "(payload->>'lender' = ? OR payload->'lender'->>'party' = ? OR payload->>'borrower' = ? OR payload->'borrower'->>'party' = ?)",
-                party, party, party, party)
-                .exceptionally(ex -> handlePqsTemplateNotFound(ex, "MatchedDeal"));
-    }
-
-    public CompletableFuture<Optional<Contract<MatchedDeal>>> findMatchedDealById(String contractId) {
-        return pqs.contractByContractId(MatchedDeal.class, contractId)
-                .exceptionally(ex -> handlePqsTemplateNotFoundOptional(ex, "MatchedDeal"));
-    }
 }

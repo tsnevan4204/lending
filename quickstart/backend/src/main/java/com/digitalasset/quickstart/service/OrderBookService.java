@@ -3,7 +3,6 @@
 
 package com.digitalasset.quickstart.service;
 
-import com.digitalasset.quickstart.pqs.Contract;
 import com.digitalasset.quickstart.repository.DamlRepository;
 import java.math.BigDecimal;
 import java.util.*;
@@ -11,11 +10,9 @@ import java.util.concurrent.CompletableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import quickstart_licensing.loan.orderbook.BorrowOrder;
-import quickstart_licensing.loan.orderbook.LendOrder;
 
 /**
- * Aggregates active BorrowOrder and LendOrder contracts into an order book.
+ * Aggregates active LenderBid and BorrowerAsk contracts into an order book view.
  * No private DAML party IDs are exposed in the output.
  */
 @Service
@@ -34,31 +31,31 @@ public class OrderBookService {
     public record OrderBook(List<Tier> asks, List<Tier> bids, BigDecimal spread) {}
 
     /**
-     * Build an aggregated order book from active orders.
-     * Asks (LendOrders) are grouped by minInterestRate+duration, sorted ascending by rate.
-     * Bids (BorrowOrders) are grouped by maxInterestRate+duration, sorted descending by rate.
+     * Build an aggregated order book from active MarketMaker orders.
+     * Asks (LenderBids) are grouped by minInterestRate+maxDuration, sorted ascending by rate.
+     * Bids (BorrowerAsks) are grouped by maxInterestRate+duration, sorted descending by rate.
      */
     public CompletableFuture<OrderBook> buildOrderBook() {
-        var lendsFuture = damlRepository.findActiveLendOrders();
-        var borrowsFuture = damlRepository.findActiveBorrowOrders();
+        var bidsFuture = damlRepository.findActiveLenderBids();
+        var asksFuture = damlRepository.findActiveBorrowerAsks();
 
-        return lendsFuture.thenCombine(borrowsFuture, (lends, borrows) -> {
-            // Aggregate asks (LendOrders) by rate+duration
+        return bidsFuture.thenCombine(asksFuture, (lenderBids, borrowerAsks) -> {
+            // Aggregate asks (LenderBids = lenders offering supply) by rate+duration
             var askMap = new LinkedHashMap<String, Tier>();
-            for (var c : lends) {
+            for (var c : lenderBids) {
                 var p = c.payload;
-                String key = p.getMinInterestRate.toPlainString() + ":" + p.getDuration;
+                String key = p.getMinInterestRate.toPlainString() + ":" + p.getMaxDuration;
                 askMap.merge(key,
-                        new Tier(p.getMinInterestRate, p.getDuration.intValue(), p.getAmount, 1),
+                        new Tier(p.getMinInterestRate, p.getMaxDuration.intValue(), p.getRemainingAmount, 1),
                         (a, b) -> new Tier(a.interestRate, a.duration,
                                 a.totalAmount.add(b.totalAmount), a.orderCount + b.orderCount));
             }
             List<Tier> asks = new ArrayList<>(askMap.values());
             asks.sort(Comparator.comparing(Tier::interestRate));
 
-            // Aggregate bids (BorrowOrders) by rate+duration
+            // Aggregate bids (BorrowerAsks = borrowers requesting demand) by rate+duration
             var bidMap = new LinkedHashMap<String, Tier>();
-            for (var c : borrows) {
+            for (var c : borrowerAsks) {
                 var p = c.payload;
                 String key = p.getMaxInterestRate.toPlainString() + ":" + p.getDuration;
                 bidMap.merge(key,

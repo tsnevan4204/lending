@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils"
 import { motion, AnimatePresence } from "motion/react"
 import {
   LayoutDashboard,
-  ArrowDownToLine,
-  ArrowUpFromLine,
+  FileText,
+  HandCoins,
   BarChart3,
   Shield,
   LogOut,
@@ -28,8 +28,8 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { label: "Overview", icon: LayoutDashboard, value: "overview" },
-  { label: "Borrower", icon: ArrowDownToLine, value: "borrower" },
-  { label: "Lender", icon: ArrowUpFromLine, value: "lender" },
+  { label: "My Loans", icon: FileText, value: "borrower" },
+  { label: "Marketplace", icon: HandCoins, value: "lender" },
   { label: "Order Book", icon: BarChart3, value: "orderbook" },
   { label: "Privacy", icon: Shield, value: "privacy" },
 ]
@@ -37,14 +37,12 @@ const navItems: NavItem[] = [
 export function AppSidebar({
   activeView,
   onViewChange,
-  role,
   onLogout,
   collapsed,
   onToggleCollapse,
 }: {
   activeView: string
   onViewChange: (view: string) => void
-  role: string
   onLogout: () => void
   collapsed: boolean
   onToggleCollapse: () => void
@@ -145,32 +143,6 @@ export function AppSidebar({
 
         {/* Bottom */}
         <div className="p-2 border-t border-border flex flex-col gap-1">
-          <AnimatePresence mode="wait">
-            {!collapsed && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                <div className="flex items-center gap-2.5 px-3 py-2 mb-1">
-                  <div className="size-8 rounded-full bg-secondary flex items-center justify-center">
-                    <span className="text-foreground text-xs font-semibold">
-                      {role === "borrower" ? "B" : "L"}
-                    </span>
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-sm font-medium text-foreground truncate">
-                      {role === "borrower" ? "app-user" : "lender"}
-                    </span>
-                    <span className="text-xs text-muted-foreground capitalize">{role}</span>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           <div className="flex items-center gap-1 px-1">
             <Tooltip>
               <TooltipTrigger asChild>

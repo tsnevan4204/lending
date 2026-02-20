@@ -991,47 +991,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /market/matched-deals:
-    get:
-      tags: [Market]
-      summary: List matched deals visible to the authenticated party
-      operationId: listMatchedDeals
-      responses:
-        '200':
-          description: A list of matched deals
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/MatchedDealResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '500':
-          $ref: '#/components/responses/InternalError'
-
-  /market/matched-deals/{contractId}:accept:
-    post:
-      tags: [Market]
-      summary: Accept a matched deal (borrower or lender)
-      operationId: acceptMatchedDeal
-      parameters:
-        - $ref: '#/components/parameters/ContractId'
-        - $ref: '#/components/parameters/CommandId'
-      responses:
-        '200':
-          description: Deal accepted (may or may not have finalized into Loan)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MatchedDealAcceptResult'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
-
 components:
   parameters:
     ContractId:
@@ -1902,33 +1861,3 @@ components:
           nullable: true
           description: Gap between lowest ask rate and highest bid rate (null if either side is empty)
 
-    MatchedDealResponse:
-      type: object
-      required: [ contractId, principal, interestRate, durationDays, matchedAt, borrowerAccepted, lenderAccepted ]
-      properties:
-        contractId:
-          type: string
-        principal:
-          type: number
-        interestRate:
-          type: number
-        durationDays:
-          type: integer
-        matchedAt:
-          type: string
-          format: date-time
-        borrowerAccepted:
-          type: boolean
-        lenderAccepted:
-          type: boolean
-
-    MatchedDealAcceptResult:
-      type: object
-      properties:
-        accepted:
-          type: boolean
-        loanCreated:
-          type: boolean
-        loanContractId:
-          type: string
-          nullable: true

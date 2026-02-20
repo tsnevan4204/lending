@@ -20,7 +20,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import org.openapitools.jackson.nullable.JsonNullable;
 import org.openapitools.model.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,7 +30,6 @@ import org.springframework.web.server.ResponseStatusException;
 import quickstart_licensing.loan.marketmaker.BorrowerAsk;
 import quickstart_licensing.loan.marketmaker.LenderBid;
 import quickstart_licensing.loan.creditprofile.CreditProfile;
-import quickstart_licensing.loan.orderbook.MatchedDeal;
 
 @RestController
 @RequestMapping("${openapi.asset.base-path:}")
@@ -234,79 +232,4 @@ public class MarketMakerApiImpl implements MarketApi {
         return api;
     }
 
-    @Override
-    @WithSpan
-    @GetMapping("/market/matched-deals")
-    public CompletableFuture<ResponseEntity<List<MatchedDealResponse>>> listMatchedDeals() {
-        var ctx = tracingCtx(logger, "listMatchedDeals");
-        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
-                damlRepository.findMatchedDeals(party).thenApply(deals -> {
-                    List<MatchedDealResponse> api = deals.stream().map(c -> {
-                        var p = c.payload;
-                        MatchedDealResponse resp = new MatchedDealResponse();
-                        resp.setContractId(c.contractId.getContractId);
-                        resp.setPrincipal(p.getPrincipal);
-                        resp.setInterestRate(p.getInterestRate);
-                        resp.setDurationDays(p.getDurationDays.intValue());
-                        resp.setMatchedAt(toOffsetDateTime(p.getMatchedAt));
-                        resp.setBorrowerAccepted(p.isBorrowerAccepted);
-                        resp.setLenderAccepted(p.isLenderAccepted);
-                        return resp;
-                    }).toList();
-                    return ResponseEntity.ok(api);
-                })
-        ));
-    }
-
-    @Override
-    @WithSpan
-    @PostMapping("/market/matched-deals/{contractId}:accept")
-    public CompletableFuture<ResponseEntity<MatchedDealAcceptResult>> acceptMatchedDeal(
-            @PathVariable("contractId") String contractId,
-            @RequestParam(value = "commandId", required = false) String commandId) {
-        var ctx = tracingCtx(logger, "acceptMatchedDeal", "contractId", contractId);
-        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
-                damlRepository.findMatchedDealById(contractId).thenCompose(opt -> {
-                    var deal = ensurePresent(opt, "MatchedDeal not found: %s", contractId);
-                    String cmdId = commandId != null ? commandId : UUID.randomUUID().toString();
-                    var payload = deal.payload;
-                    String borrowerParty = payload.getBorrower.getParty;
-                    String lenderParty = payload.getLender.getParty;
-
-                    if (party.equals(borrowerParty)) {
-                        return ledger.exerciseAndGetResult(
-                                deal.contractId,
-                                new MatchedDeal.MatchedDeal_BorrowerAccept(),
-                                cmdId,
-                                party
-                        ).thenApply(this::toAcceptResult);
-                    } else if (party.equals(lenderParty)) {
-                        return ledger.exerciseAndGetResult(
-                                deal.contractId,
-                                new MatchedDeal.MatchedDeal_LenderAccept(),
-                                cmdId,
-                                party
-                        ).thenApply(this::toAcceptResult);
-                    } else {
-                        return CompletableFuture.<ResponseEntity<MatchedDealAcceptResult>>failedFuture(
-                                new ResponseStatusException(HttpStatus.FORBIDDEN,
-                                        "Party is neither borrower nor lender on this deal"));
-                    }
-                })
-        ));
-    }
-
-    private ResponseEntity<MatchedDealAcceptResult> toAcceptResult(Object result) {
-        MatchedDealAcceptResult resp = new MatchedDealAcceptResult();
-        resp.setAccepted(true);
-        // Result is Either (ContractId MatchedDeal) (ContractId Loan)
-        if (result instanceof daml_prim_da_types.da.types.Either.Either_Right<?, ?> right) {
-            resp.setLoanCreated(true);
-            var loanCid = (com.digitalasset.transcode.java.ContractId<?>) right.getValue;
-            resp.setLoanContractId(JsonNullable.of(loanCid.getContractId));
-        } else {
-            resp.setLoanCreated(false);
-        }
-        return ResponseEntity.ok(resp);
-    }
 }

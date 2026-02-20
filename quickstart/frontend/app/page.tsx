@@ -15,7 +15,6 @@ import { PrivacyView } from "@/components/denver/privacy-view"
 import { useDenverData } from "@/hooks/use-denver-data"
 
 export default function DenverLendingApp() {
-  const [role, setRole] = useState<"borrower" | "lender">("borrower")
   const [activeView, setActiveView] = useState("overview")
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
@@ -42,7 +41,7 @@ export default function DenverLendingApp() {
     markLoanDefault,
     createLenderBid,
     cancelLenderBid,
-  } = useDenverData(role)
+  } = useDenverData()
 
   // ---- loading / auth states ----
 
@@ -62,9 +61,8 @@ export default function DenverLendingApp() {
       <LoginScreen
         noBackend={authStatus === "no-backend"}
         login={login}
-        onLogin={(selectedRole) => {
-          setRole(selectedRole)
-          setActiveView(selectedRole === "borrower" ? "borrower" : "lender")
+        onLogin={() => {
+          setActiveView("overview")
         }}
       />
     )
@@ -72,7 +70,7 @@ export default function DenverLendingApp() {
 
   // ---- authenticated ----
 
-  const displayName = currentUser?.name ?? (role === "borrower" ? "app-user" : "lender")
+  const displayName = currentUser?.name ?? "user"
   const partyId = currentUser?.party ?? "—"
 
   function handleLogout() {
@@ -84,7 +82,6 @@ export default function DenverLendingApp() {
       <AppSidebar
         activeView={activeView}
         onViewChange={setActiveView}
-        role={role}
         onLogout={handleLogout}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -118,25 +115,6 @@ export default function DenverLendingApp() {
                 </button>
               </span>
             )}
-            {/* Role switcher */}
-            <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
-              {(["borrower", "lender"] as const).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => {
-                    setRole(r)
-                    setActiveView(r === "borrower" ? "borrower" : "lender")
-                  }}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                    role === r
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {r.charAt(0).toUpperCase() + r.slice(1)}
-                </button>
-              ))}
-            </div>
             <div className="flex items-center gap-2">
               <div className="size-7 rounded-full bg-secondary flex items-center justify-center">
                 <span className="text-foreground text-[10px] font-semibold">

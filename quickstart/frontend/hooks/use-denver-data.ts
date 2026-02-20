@@ -23,8 +23,6 @@ import {
   listBorrowerAsks,
   getPlatformStats,
   getOrderBook,
-  listMatchedDeals,
-  acceptMatchedDeal,
   createLoanRequest as apiCreateLoanRequest,
   createLoanOffer as apiCreateLoanOffer,
   fundLoan as apiFundLoan,
@@ -48,7 +46,7 @@ import {
 
 export type AuthStatus = "checking" | "authenticated" | "unauthenticated" | "no-backend"
 
-export function useDenverData(role: "borrower" | "lender") {
+export function useDenverData() {
   // Auth state
   const [authStatus, setAuthStatus] = useState<AuthStatus>("checking")
   const [currentUser, setCurrentUser] = useState<ApiUser | null>(null)
@@ -64,9 +62,6 @@ export function useDenverData(role: "borrower" | "lender") {
   const [orderBook, setOrderBook] = useState<ApiOrderBookResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Track which MatchedDeal contractIds we've already auto-accepted
-  const [autoAcceptedDeals, setAutoAcceptedDeals] = useState<Set<string>>(new Set())
 
   const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
@@ -136,45 +131,6 @@ export function useDenverData(role: "borrower" | "lender") {
     }
   }, [authStatus, loadRealData])
 
-  // Auto-accept MatchedDeal contracts where the logged-in user is an observer.
-  // Polls every 3 seconds for new deals and automatically submits Accept.
-  useEffect(() => {
-    if (authStatus !== "authenticated") return
-    let cancelled = false
-
-    const pollAndAutoAccept = async () => {
-      try {
-        const deals = await listMatchedDeals()
-        for (const deal of deals) {
-          if (cancelled) break
-          // Skip deals we've already auto-accepted
-          if (autoAcceptedDeals.has(deal.contractId)) continue
-          // Only auto-accept if the user hasn't already accepted their side
-          // The backend determines which choice to exercise based on party
-          if (deal.borrowerAccepted && deal.lenderAccepted) continue
-          try {
-            await acceptMatchedDeal(deal.contractId)
-            setAutoAcceptedDeals(prev => new Set(prev).add(deal.contractId))
-          } catch {
-            // Silently ignore — may already be archived or accepted
-          }
-        }
-        if (!cancelled) {
-          await sleep(1000)
-          await loadRealData()
-        }
-      } catch {
-        // ignore polling errors
-      }
-    }
-
-    const interval = setInterval(pollAndAutoAccept, 3000)
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [authStatus, autoAcceptedDeals, loadRealData])
-
   const login = useCallback(
     async (username: string, password = ""): Promise<boolean> => {
       const user = await loginSharedSecret(username, password)
@@ -211,13 +167,22 @@ export function useDenverData(role: "borrower" | "lender") {
       setError(null)
       try {
         await apiCreateLoanRequest(payload)
+        // Also create a BorrowerAsk so it appears in the order book
+        // and can be matched by the matching engine
+        const cpId = creditProfile?.contractId ?? mockCreditProfile.contractId ?? ""
+        await apiCreateBorrowerAsk({
+          amount: payload.amount,
+          maxInterestRate: payload.interestRate,
+          duration: payload.duration,
+          creditProfileId: cpId,
+        })
         await loadRealData()
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to create loan request")
         throw e
       }
     },
-    [loadRealData]
+    [loadRealData, creditProfile]
   )
 
   const createLoanOffer = useCallback(
