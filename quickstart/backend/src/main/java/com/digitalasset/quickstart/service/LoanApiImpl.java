@@ -702,6 +702,31 @@ public class LoanApiImpl implements LoansApi {
         });
     }
 
+    @WithSpan
+    @PostMapping("/loans/{contractId}:mark-default")
+    @ResponseBody
+    public CompletableFuture<ResponseEntity<Void>> markLoanDefault(
+            @PathVariable("contractId") String contractId, String commandId) {
+        var ctx = tracingCtx(logger, "markLoanDefault", "contractId", contractId);
+        return auth.asAuthenticatedParty(party -> {
+            logger.info("[markLoanDefault] party={} loanContractId={}", party, contractId);
+            return traceServiceCallAsync(ctx, () ->
+                        damlRepository.findLoanById(contractId)
+                                .thenCompose(optLoan -> {
+                                    var loan = ensurePresent(optLoan, "Loan not found: %s", contractId);
+                                    var choice = new Loan.Loan_MarkDefault();
+                                    return ledger.exerciseAndGetResult(
+                                            loan.contractId, choice,
+                                            commandId != null ? commandId : UUID.randomUUID().toString(),
+                                            party)
+                                            .thenApply(v -> {
+                                                logger.info("[markLoanDefault] completed loanContractId={}", contractId);
+                                                return ResponseEntity.<Void>ok().build();
+                                            });
+                                }));
+        });
+    }
+
     /**
      * Aggregate platform statistics computed from all active Loan contracts visible to the PQS node.
      * Returns live on-chain data: TVL, loan count, average rate, unique parties.

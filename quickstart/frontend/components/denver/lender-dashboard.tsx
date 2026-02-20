@@ -51,7 +51,7 @@ const stagger = {
 
 const fadeUp = {
   hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] as const } },
 }
 
 function MakeOfferForm({
@@ -72,6 +72,8 @@ function MakeOfferForm({
     const form = e.currentTarget
     const amount = Number((form.querySelector("#offer-amount") as HTMLInputElement)?.value) || 0
     const interestRate = Number((form.querySelector("#offer-rate") as HTMLInputElement)?.value) || 0
+    if (amount <= 0) { setError("Amount must be greater than 0"); return }
+    if (interestRate <= 0 || interestRate > 100) { setError("Interest rate must be between 0 and 100"); return }
     setLoading(true)
     try {
       if (onSubmit) await onSubmit({ loanRequestId: request.contractId, amount, interestRate })
@@ -122,6 +124,9 @@ function PlaceBidForm({
     const amount = Number((form.querySelector("#bid-amount") as HTMLInputElement)?.value) || 0
     const minInterestRate = Number((form.querySelector("#min-rate") as HTMLInputElement)?.value) || 0
     const maxDuration = Number((form.querySelector("#max-dur") as HTMLInputElement)?.value) || 0
+    if (amount <= 0) { setError("Amount must be greater than 0"); return }
+    if (minInterestRate <= 0 || minInterestRate > 100) { setError("Interest rate must be between 0 and 100"); return }
+    if (maxDuration <= 0 || maxDuration > 120) { setError("Max duration must be between 1 and 120 months"); return }
     setLoading(true)
     try {
       if (onSubmit) await onSubmit({ amount, minInterestRate, maxDuration })

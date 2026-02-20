@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
-import { LogOut, Loader2 } from "lucide-react"
+import { LogOut, Loader2, X } from "lucide-react"
 import { AppSidebar } from "@/components/denver/app-sidebar"
 import { LoginScreen } from "@/components/denver/login-screen"
 import { OverviewDashboard } from "@/components/denver/overview-dashboard"
@@ -32,6 +32,7 @@ export default function DenverLendingApp() {
     platformStats,
     loading,
     error,
+    clearError,
     createLoanRequest,
     createLoanOffer,
     fundLoan,
@@ -108,8 +109,11 @@ export default function DenverLendingApp() {
           </div>
           <div className="ml-auto flex items-center gap-4">
             {error && (
-              <span className="text-xs text-destructive max-w-xs truncate" title={error}>
+              <span className="text-xs text-destructive max-w-xs truncate flex items-center gap-1" title={error}>
                 {error}
+                <button onClick={clearError} className="hover:text-foreground transition-colors p-0.5 rounded">
+                  <X className="size-3" />
+                </button>
               </span>
             )}
             {/* Role switcher */}

@@ -58,7 +58,7 @@ const stagger = {
 
 const fadeUp = {
   hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] as const } },
 }
 
 const PURPOSE_OPTIONS: { value: string; label: string }[] = [
@@ -88,6 +88,9 @@ function LoanRequestForm({
     const amount = Number((form.querySelector("#amount") as HTMLInputElement)?.value) || 0
     const interestRate = Number((form.querySelector("#rate") as HTMLInputElement)?.value) || 0
     const duration = Number((form.querySelector("#duration") as HTMLInputElement)?.value) || 0
+    if (amount <= 0) { setError("Amount must be greater than 0"); return }
+    if (interestRate <= 0 || interestRate > 100) { setError("Interest rate must be between 0 and 100"); return }
+    if (duration <= 0 || duration > 120) { setError("Duration must be between 1 and 120 months"); return }
     const purposeLabel = PURPOSE_OPTIONS.find((p) => p.value === purpose)?.label || "Other"
     setLoading(true)
     try {

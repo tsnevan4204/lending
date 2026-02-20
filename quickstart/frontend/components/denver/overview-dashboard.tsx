@@ -60,7 +60,7 @@ const stagger = {
 
 const fadeUp = {
   hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] as const } },
 }
 
 export function OverviewDashboard({
@@ -100,12 +100,12 @@ export function OverviewDashboard({
 
       {/* Stats Grid */}
       <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard label="Total Value Locked" value={formatCurrency(stats.totalValueLocked)} change="+12.5% this month" icon={DollarSign} iconColor="text-primary" delay={0} />
-        <StatCard label="Active Loans" value={stats.activeLoans.toString()} change="+8 this week" icon={Activity} iconColor="text-primary" delay={0.05} />
-        <StatCard label="Avg. Interest Rate" value={`${stats.averageInterestRate}%`} change="-0.3% from last month" icon={TrendingUp} iconColor="text-muted-foreground" delay={0.1} />
-        <StatCard label="Loans Originated" value={stats.totalLoansOriginated.toString()} change="+56 this month" icon={FileCheck} iconColor="text-primary" delay={0.15} />
-        <StatCard label="Active Lenders" value={stats.totalLenders.toString()} change="+3 this week" icon={ArrowUpFromLine} iconColor="text-muted-foreground" delay={0.2} />
-        <StatCard label="Active Borrowers" value={stats.totalBorrowers.toString()} change="+11 this week" icon={ArrowDownToLine} iconColor="text-muted-foreground" delay={0.25} />
+        <StatCard label="Total Value Locked" value={formatCurrency(stats.totalValueLocked)} change="+12.5% this month" icon={DollarSign} iconColor="text-primary" />
+        <StatCard label="Active Loans" value={stats.activeLoans.toString()} change="+8 this week" icon={Activity} iconColor="text-primary" />
+        <StatCard label="Avg. Interest Rate" value={`${stats.averageInterestRate}%`} change="-0.3% from last month" icon={TrendingUp} iconColor="text-muted-foreground" />
+        <StatCard label="Loans Originated" value={stats.totalLoansOriginated.toString()} change="+56 this month" icon={FileCheck} iconColor="text-primary" />
+        <StatCard label="Active Lenders" value={stats.totalLenders.toString()} change="+3 this week" icon={ArrowUpFromLine} iconColor="text-muted-foreground" />
+        <StatCard label="Active Borrowers" value={stats.totalBorrowers.toString()} change="+11 this week" icon={ArrowDownToLine} iconColor="text-muted-foreground" />
       </motion.div>
 
       {/* Volume Chart */}

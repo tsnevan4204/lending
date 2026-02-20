@@ -645,6 +645,24 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /loans/{contractId}:mark-default:
+    post:
+      tags: [Loans]
+      summary: Mark a loan as defaulted (lender)
+      operationId: markLoanDefault
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '200':
+          description: Loan marked as defaulted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /loans/{contractId}:request-repayment:
     post:
       tags: [Loans]

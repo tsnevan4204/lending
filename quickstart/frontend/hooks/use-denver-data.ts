@@ -152,81 +152,135 @@ export function useDenverData(role: "borrower" | "lender") {
 
   const createLoanRequest = useCallback(
     async (payload: { amount: number; interestRate: number; duration: number; purpose: string }) => {
-      await apiCreateLoanRequest(payload)
-      await loadRealData()
+      setError(null)
+      try {
+        await apiCreateLoanRequest(payload)
+        await loadRealData()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to create loan request")
+        throw e
+      }
     },
     [loadRealData]
   )
 
   const createLoanOffer = useCallback(
     async (payload: { loanRequestId: string; amount: number; interestRate: number }) => {
-      await apiCreateLoanOffer(payload)
-      await loadRealData()
+      setError(null)
+      try {
+        await apiCreateLoanOffer(payload)
+        await loadRealData()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to create loan offer")
+        throw e
+      }
     },
     [loadRealData]
   )
 
   const fundLoan = useCallback(
     async (offerContractId: string, creditProfileId: string) => {
-      await apiFundLoan(offerContractId, creditProfileId)
-      await sleep(1500) // allow PQS to index the new Loan contract
-      await loadRealData()
+      setError(null)
+      try {
+        await apiFundLoan(offerContractId, creditProfileId)
+        await sleep(1500)
+        await loadRealData()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to fund loan")
+        throw e
+      }
     },
     [loadRealData]
   )
 
   const repayLoan = useCallback(
     async (loanContractId: string) => {
-      await apiRepayLoan(loanContractId)
-      await sleep(1500)
-      await loadRealData()
+      setError(null)
+      try {
+        await apiRepayLoan(loanContractId)
+        await sleep(1500)
+        await loadRealData()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to repay loan")
+        throw e
+      }
     },
     [loadRealData]
   )
 
   const markLoanDefault = useCallback(
     async (loanContractId: string) => {
-      await apiMarkLoanDefault(loanContractId)
-      await sleep(1500)
-      await loadRealData()
+      setError(null)
+      try {
+        await apiMarkLoanDefault(loanContractId)
+        await sleep(1500)
+        await loadRealData()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to mark loan as defaulted")
+        throw e
+      }
     },
     [loadRealData]
   )
 
   const createLenderBid = useCallback(
     async (payload: { amount: number; minInterestRate: number; maxDuration: number }) => {
-      if (!useApi) return
-      await apiCreateLenderBid(payload)
-      await refresh()
+      setError(null)
+      try {
+        await apiCreateLenderBid(payload)
+        await sleep(1500)
+        await loadRealData()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to create lender bid")
+        throw e
+      }
     },
-    [useApi, refresh]
+    [loadRealData]
   )
 
   const createBorrowerAsk = useCallback(
     async (payload: { amount: number; maxInterestRate: number; duration: number; creditProfileId: string }) => {
-      if (!useApi) return
-      await apiCreateBorrowerAsk(payload)
-      await refresh()
+      setError(null)
+      try {
+        await apiCreateBorrowerAsk(payload)
+        await sleep(1500)
+        await loadRealData()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to create borrower ask")
+        throw e
+      }
     },
-    [useApi, refresh]
+    [loadRealData]
   )
 
   const cancelLenderBid = useCallback(
     async (contractId: string) => {
-      if (!useApi) return
-      await apiCancelLenderBid(contractId)
-      await refresh()
+      setError(null)
+      try {
+        await apiCancelLenderBid(contractId)
+        await sleep(1500)
+        await loadRealData()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to cancel bid")
+        throw e
+      }
     },
-    [useApi, refresh]
+    [loadRealData]
   )
 
   const cancelBorrowerAsk = useCallback(
     async (contractId: string) => {
-      if (!useApi) return
-      await apiCancelBorrowerAsk(contractId)
-      await refresh()
+      setError(null)
+      try {
+        await apiCancelBorrowerAsk(contractId)
+        await sleep(1500)
+        await loadRealData()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to cancel ask")
+        throw e
+      }
     },
-    [useApi, refresh]
+    [loadRealData]
   )
 
   return {
@@ -245,6 +299,7 @@ export function useDenverData(role: "borrower" | "lender") {
     platformStats,
     loading,
     error,
+    clearError: () => setError(null),
     refresh,
     // Actions
     createLoanRequest,

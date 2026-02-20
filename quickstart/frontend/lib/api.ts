@@ -141,10 +141,12 @@ function mapLoan(l: ApiLoan): ActiveLoan {
     lender: l.lender,
     amount: l.principal,
     interestRate: l.interestRate,
+    // DAML Loan template doesn't store duration; UI shows dueDate instead
     duration: 0,
+    // DAML Loan template doesn't store purpose (only LoanRequest does)
     purpose: "—",
     status,
-    // dueDate is all we have from the backend; fundedAt is not stored separately
+    // Backend doesn't return fundedAt; use dueDate as placeholder (UI only shows dueDate)
     fundedAt: l.dueDate,
     dueDate: l.dueDate,
   }
