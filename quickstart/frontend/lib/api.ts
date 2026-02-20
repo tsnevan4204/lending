@@ -28,6 +28,72 @@ import type {
 
 const API_BASE = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "/api") : ""
 
+// ---- Auth types ----
+
+// Field names match the generated AuthenticatedUser model from openapi.yaml: name, party, roles, isAdmin, walletUrl
+export interface ApiUser {
+  name: string
+  party: string
+  roles: string[]
+  isAdmin: boolean
+  walletUrl: string | null
+}
+
+// ---- Auth API ----
+
+/**
+ * Returns the currently authenticated user, or null if not logged in.
+ * This is the source of truth for auth state.
+ */
+export async function getUser(): Promise<ApiUser | null> {
+  try {
+    const res = await fetch(`${API_BASE}/user`, { credentials: "include" })
+    if (res.status === 401 || res.status === 403) return null
+    if (!res.ok) return null
+    return res.json() as Promise<ApiUser>
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Attempts shared-secret login. Spring Security form login redirects on
+ * success/failure, so we verify by calling /api/user afterward.
+ * Returns the user on success, null on failure.
+ */
+export async function loginSharedSecret(
+  username: string,
+  password = ""
+): Promise<ApiUser | null> {
+  try {
+    const body = new URLSearchParams({ username, password })
+    await fetch("/login/shared-secret", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+      redirect: "manual",
+    })
+    // Regardless of redirect status, check if we now have a valid session
+    return getUser()
+  } catch {
+    return null
+  }
+}
+
+/** POST to /logout and invalidate the session. */
+export async function logoutUser(): Promise<void> {
+  try {
+    await fetch("/logout", {
+      method: "POST",
+      credentials: "include",
+      redirect: "manual",
+    })
+  } catch {
+    // ignore — session cookie will be cleared by browser anyway
+  }
+}
+
 function daysToMonths(days: number): number {
   return Math.round(days / 30) || 1
 }
@@ -76,8 +142,9 @@ function mapLoan(l: ApiLoan): ActiveLoan {
     amount: l.principal,
     interestRate: l.interestRate,
     duration: 0,
-    purpose: "",
+    purpose: "—",
     status,
+    // dueDate is all we have from the backend; fundedAt is not stored separately
     fundedAt: l.dueDate,
     dueDate: l.dueDate,
   }
@@ -122,11 +189,12 @@ function commandId(): string {
   return `denver-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-/** Check if backend is reachable (e.g. from quickstart stack). */
-export async function isApiAvailable(): Promise<boolean> {
+/** Check if the backend is reachable at all (regardless of auth state). */
+export async function isBackendReachable(): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/user`, { credentials: "include", method: "GET" })
-    return res.ok || res.status === 401
+    // 200 = authenticated, 401 = backend up but not authed — both mean reachable
+    return res.status === 200 || res.status === 401
   } catch {
     return false
   }

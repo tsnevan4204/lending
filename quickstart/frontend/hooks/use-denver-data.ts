@@ -10,7 +10,11 @@ import type {
   BorrowerAsk,
 } from "@/lib/mock-data"
 import {
-  isApiAvailable,
+  type ApiUser,
+  getUser,
+  loginSharedSecret,
+  logoutUser,
+  isBackendReachable,
   listLoanRequests,
   listLoanOffers,
   listLoans,
@@ -38,8 +42,14 @@ import {
   mockPlatformStats,
 } from "@/lib/mock-data"
 
+export type AuthStatus = "checking" | "authenticated" | "unauthenticated" | "no-backend"
+
 export function useDenverData(role: "borrower" | "lender") {
-  const [useApi, setUseApi] = useState<boolean | null>(null)
+  // Auth state
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("checking")
+  const [currentUser, setCurrentUser] = useState<ApiUser | null>(null)
+
+  // Data state — start with mocks so the UI is never blank
   const [requests, setRequests] = useState<LoanRequest[]>(mockLoanRequests)
   const [offers, setOffers] = useState<LoanOffer[]>(mockLoanOffers)
   const [loans, setLoans] = useState<ActiveLoan[]>(mockActiveLoans)
@@ -50,19 +60,9 @@ export function useDenverData(role: "borrower" | "lender") {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const refresh = useCallback(async () => {
-    if (useApi === false) {
-      setRequests(mockLoanRequests)
-      setOffers(mockLoanOffers)
-      setLoans(mockActiveLoans)
-      setCreditProfile(mockCreditProfile)
-      setBids(mockLenderBids)
-      setAsks(mockBorrowerAsks)
-      setPlatformStats(mockPlatformStats)
-      setLoading(false)
-      return
-    }
-    if (!useApi) return
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+  const loadRealData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -84,84 +84,113 @@ export function useDenverData(role: "borrower" | "lender") {
       if (stats) setPlatformStats(stats)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load data")
-      setRequests(mockLoanRequests)
-      setOffers(mockLoanOffers)
-      setLoans(mockActiveLoans)
-      setCreditProfile(mockCreditProfile)
-      setBids(mockLenderBids)
-      setAsks(mockBorrowerAsks)
-      setPlatformStats(mockPlatformStats)
     } finally {
       setLoading(false)
     }
-  }, [useApi])
+  }, [])
 
+  // On mount: check auth state
   useEffect(() => {
     let cancelled = false
-    isApiAvailable().then((ok) => {
-      if (!cancelled) setUseApi(ok)
-    })
+    async function checkAuth() {
+      const reachable = await isBackendReachable()
+      if (cancelled) return
+      if (!reachable) {
+        setAuthStatus("no-backend")
+        return
+      }
+      const user = await getUser()
+      if (cancelled) return
+      if (user) {
+        setCurrentUser(user)
+        setAuthStatus("authenticated")
+      } else {
+        setAuthStatus("unauthenticated")
+      }
+    }
+    checkAuth()
     return () => { cancelled = true }
   }, [])
 
+  // Load real data whenever we become authenticated
   useEffect(() => {
-    if (useApi === false) {
-      setRequests(mockLoanRequests)
-      setOffers(mockLoanOffers)
-      setLoans(mockActiveLoans)
-      setCreditProfile(mockCreditProfile)
-      setBids(mockLenderBids)
-      setAsks(mockBorrowerAsks)
-      setPlatformStats(mockPlatformStats)
-      setLoading(false)
-      return
+    if (authStatus === "authenticated") {
+      loadRealData()
     }
-    if (useApi === true) refresh()
-  }, [useApi, refresh])
+  }, [authStatus, loadRealData])
+
+  const login = useCallback(
+    async (username: string, password = ""): Promise<boolean> => {
+      const user = await loginSharedSecret(username, password)
+      if (user) {
+        setCurrentUser(user)
+        setAuthStatus("authenticated")
+        return true
+      }
+      return false
+    },
+    []
+  )
+
+  const logout = useCallback(async () => {
+    await logoutUser()
+    setCurrentUser(null)
+    setAuthStatus("unauthenticated")
+    // Reset to mock data so there's no flash of empty state on next login
+    setRequests(mockLoanRequests)
+    setOffers(mockLoanOffers)
+    setLoans(mockActiveLoans)
+    setCreditProfile(mockCreditProfile)
+    setBids(mockLenderBids)
+    setAsks(mockBorrowerAsks)
+    setPlatformStats(mockPlatformStats)
+  }, [])
+
+  const refresh = useCallback(async () => {
+    if (authStatus === "authenticated") await loadRealData()
+  }, [authStatus, loadRealData])
 
   const createLoanRequest = useCallback(
     async (payload: { amount: number; interestRate: number; duration: number; purpose: string }) => {
-      if (!useApi) return
       await apiCreateLoanRequest(payload)
-      await refresh()
+      await loadRealData()
     },
-    [useApi, refresh]
+    [loadRealData]
   )
 
   const createLoanOffer = useCallback(
     async (payload: { loanRequestId: string; amount: number; interestRate: number }) => {
-      if (!useApi) return
       await apiCreateLoanOffer(payload)
-      await refresh()
+      await loadRealData()
     },
-    [useApi, refresh]
+    [loadRealData]
   )
 
   const fundLoan = useCallback(
     async (offerContractId: string, creditProfileId: string) => {
-      if (!useApi) return
       await apiFundLoan(offerContractId, creditProfileId)
-      await refresh()
+      await sleep(1500) // allow PQS to index the new Loan contract
+      await loadRealData()
     },
-    [useApi, refresh]
+    [loadRealData]
   )
 
   const repayLoan = useCallback(
     async (loanContractId: string) => {
-      if (!useApi) return
       await apiRepayLoan(loanContractId)
-      await refresh()
+      await sleep(1500)
+      await loadRealData()
     },
-    [useApi, refresh]
+    [loadRealData]
   )
 
   const markLoanDefault = useCallback(
     async (loanContractId: string) => {
-      if (!useApi) return
       await apiMarkLoanDefault(loanContractId)
-      await refresh()
+      await sleep(1500)
+      await loadRealData()
     },
-    [useApi, refresh]
+    [loadRealData]
   )
 
   const createLenderBid = useCallback(
@@ -201,6 +230,12 @@ export function useDenverData(role: "borrower" | "lender") {
   )
 
   return {
+    // Auth
+    authStatus,
+    currentUser,
+    login,
+    logout,
+    // Data
     requests,
     offers,
     loans,
@@ -210,8 +245,8 @@ export function useDenverData(role: "borrower" | "lender") {
     platformStats,
     loading,
     error,
-    useApi: useApi ?? false,
     refresh,
+    // Actions
     createLoanRequest,
     createLoanOffer,
     fundLoan,

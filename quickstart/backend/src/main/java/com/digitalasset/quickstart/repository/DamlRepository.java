@@ -385,6 +385,12 @@ public class DamlRepository {
                 .exceptionally(ex -> handlePqsTemplateNotFound(ex, "Loan"));
     }
 
+    /** All active Loan contracts visible to the PQS node (used for aggregate platform stats). */
+    public CompletableFuture<List<Contract<Loan>>> findAllActiveLoans() {
+        return pqs.active(Loan.class)
+                .exceptionally(ex -> handlePqsTemplateNotFound(ex, "Loan"));
+    }
+
     public CompletableFuture<Optional<Contract<Loan>>> findLoanById(String contractId) {
         return pqs.contractByContractId(Loan.class, contractId)
                 .exceptionally(ex -> handlePqsTemplateNotFoundOptional(ex, "Loan"));
