@@ -52,29 +52,14 @@ export function AppSidebar({
         className="flex flex-col border-r border-border bg-background h-screen sticky top-0 overflow-hidden transition-colors duration-300"
       >
         {/* Logo */}
-        <div className="flex items-center h-16 px-4 border-b border-border">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <motion.div
-              whileHover={{ rotate: 360 }}
-              transition={{ duration: 0.6, ease: "easeInOut" }}
-              className="size-8 rounded-full bg-primary flex items-center justify-center shrink-0 cursor-pointer"
-            >
-              <span className="text-primary-foreground font-bold text-sm">D</span>
-            </motion.div>
-            <AnimatePresence mode="wait">
-              {!collapsed && (
-                <motion.span
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -8 }}
-                  transition={{ duration: 0.2 }}
-                  className="text-base font-semibold text-foreground truncate tracking-tight"
-                >
-                  Denver
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </div>
+        <div className="flex items-center justify-center border-b border-border overflow-hidden">
+          <motion.div
+            whileHover={{ rotate: 360 }}
+            transition={{ duration: 0.6, ease: "easeInOut" }}
+            className="size-32 cursor-pointer scale-150"
+          >
+            <img src="/logo.png" alt="Logo" className="size-32 object-contain" />
+          </motion.div>
         </div>
 
         {/* Navigation */}

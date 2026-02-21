@@ -14,7 +14,7 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Denver Lending — Decentralized Microlending Platform',
+  title: 'Credix — Decentralized Microlending Platform',
   description: 'Privacy-preserving decentralized lending on the Canton Network. Borrow, lend, and trade with cryptographic privacy guarantees.',
   icons: {
     icon: [
