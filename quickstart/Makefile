@@ -33,6 +33,9 @@ ifndef LOCALNET_DIR
   export LOCALNET_DIR=$(MODULES_DIR)/localnet
 endif
 
+# Ensure Daml SDK is on PATH when installed via make install-daml-sdk (or ensure-daml-sdk)
+export PATH := $(HOME)/.daml/bin:$(PATH)
+
 # Print out info about paths:
 ifdef PATH_DEBUG_INFO
   $(warning MODULES_DIR=$(MODULES_DIR))
@@ -145,14 +148,13 @@ SETUP_COMMAND := ./gradlew configureProfiles --no-daemon --console=plain --quiet
 
 # Build targets
 .PHONY: build
-build: $(FIRST_RUN_DEPENDENCY) build-frontend build-backend build-daml build-docker-images ## Build frontend, backend, Daml model and docker images
+build: $(FIRST_RUN_DEPENDENCY) ensure-daml-sdk build-frontend build-backend build-daml build-docker-images ## Build frontend, backend, Daml model and docker images
 
 .PHONY: build-frontend
 build-frontend: ## Build the frontend (Next.js static export) into frontend/dist
 	mkdir -p frontend/dist
 	cd frontend && npm ci 2>/dev/null || npm install
 	cd frontend && npm run build
-	cp -r frontend/out/. frontend/dist/
 
 .PHONY: build-backend
 build-backend: ## Build the backend service
@@ -244,6 +246,7 @@ endif
 endif
 start: $(FIRST_RUN_DEPENDENCY) build ## Start the application, and observability services if enabled
 	$(call docker-compose, ${DOCKER_COMPOSE_OBSERVABILITY_FILES} $(RESOURCE_CONSTRAINT_CONFIG) up -d --no-recreate)
+	$(call docker-compose, restart nginx backend-service)
 
 .PHONY: start-vite-dev
 start-vite-dev: ## Start the frontend application in development mode
@@ -378,8 +381,9 @@ clean-shell: docker-available ## Stop and remove the Daml Shell container
 
 # Clean targets
 .PHONY: clean
-clean: ## Clean the build artifacts
+clean: ## Clean the build artifacts (Gradle, frontend dist and Next.js cache)
 	./gradlew clean
+	rm -rf frontend/dist frontend/.next
 
 .PHONY: clean-docker
 clean-docker: clean-shell clean-canton-console ## Stop and remove application Docker containers and volumes
@@ -405,6 +409,13 @@ clean-all-docker: docker-available ## Stop and remove all Docker containers netw
 	@echo "🗑️  Removing QS volumes (label=$(DOCKER_NETWORK))..."
 	@vids="$$(docker volume ls -q --filter "name=^$(DOCKER_NETWORK)")"; \
 	if [ -n "$$vids" ]; then docker volume rm $$vids; else echo "  (none)";fi
+
+.PHONY: ensure-daml-sdk
+ensure-daml-sdk: ## Install the Daml SDK if not already present on PATH
+	@if ! command -v daml >/dev/null 2>&1; then \
+	  echo "Daml SDK not found. Installing..."; \
+	  $(MAKE) install-daml-sdk; \
+	fi
 
 .PHONY: install-daml-sdk
 install-daml-sdk: ## Install the Daml SDK
