@@ -157,24 +157,14 @@ public class MarketMakerApiImpl implements MarketApi {
             BigDecimal maxRate = body.getMaxInterestRate() != null
                     ? BigDecimal.valueOf(body.getMaxInterestRate()) : BigDecimal.ZERO;
             int duration = body.getDuration() != null ? body.getDuration() : 30;
-
-            // Validate credit profile exists
-            String creditProfileContractId = body.getCreditProfileId();
-            if (creditProfileContractId == null || creditProfileContractId.isEmpty() ||
-                creditProfileContractId.startsWith("mock")) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Valid credit profile required to place ask");
-            }
-
-            ContractId<CreditProfile> creditProfileId = new ContractId<>(creditProfileContractId);
-
+            // creditProfileId removed from BorrowerAsk (privacy improvement — platform operator
+            // no longer sees the borrower's credit profile ID in standing contract data).
             BorrowerAsk template = new BorrowerAsk(
                     new Party(party),
                     new Party(auth.getAppProviderPartyId()),
                     amount,
                     maxRate,
                     (long) duration,
-                    creditProfileId,
                     now
             );
             return ledger.create(template,
@@ -254,16 +244,27 @@ public class MarketMakerApiImpl implements MarketApi {
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
                 damlRepository.findMatchedProposalById(contractId).thenCompose(opt -> {
                     var proposal = ensurePresent(opt, "MatchedLoanProposal not found: %s", contractId);
-                    var choice = new MatchedLoanProposal.MatchedLoanProposal_Accept();
                     String lender = proposal.payload.getLender.getParty;
                     String borrower = proposal.payload.getBorrower.getParty;
-                    return ledger.exerciseAndGetResultWithParties(proposal.contractId, choice,
-                            commandId != null ? commandId : UUID.randomUUID().toString(),
-                            List.of(lender, borrower))
-                            .thenApply(loanCid -> {
-                                var resp = new AcceptMatchedProposal200Response();
-                                resp.setLoanId(loanCid.getContractId);
-                                return ResponseEntity.ok(resp);
+                    // MatchedLoanProposal no longer carries creditProfileId (privacy improvement —
+                    // lender should not see it in standing contract data). The borrower's credit
+                    // profile is looked up here so it can be supplied as a choice argument at
+                    // accept time. The borrower is a co-controller so they implicitly authorize.
+                    return damlRepository.findActiveCreditProfilesByBorrower(borrower)
+                            .thenCompose(profiles -> {
+                                var profile = profiles.stream().findFirst().orElseThrow(
+                                        () -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                                                "No active credit profile found for borrower: " + borrower));
+                                var choice = new MatchedLoanProposal.MatchedLoanProposal_Accept(
+                                        profile.contractId);
+                                return ledger.exerciseAndGetResultWithParties(proposal.contractId, choice,
+                                        commandId != null ? commandId : UUID.randomUUID().toString(),
+                                        List.of(lender, borrower))
+                                        .thenApply(loanCid -> {
+                                            var resp = new AcceptMatchedProposal200Response();
+                                            resp.setLoanId(loanCid.getContractId);
+                                            return ResponseEntity.ok(resp);
+                                        });
                             });
                 })
         ));

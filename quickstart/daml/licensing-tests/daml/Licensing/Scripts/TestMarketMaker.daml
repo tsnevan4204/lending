@@ -51,7 +51,6 @@ testFullMatch = script do
     amount = 1000.0
     maxInterestRate = 5.0
     duration = 60
-    creditProfileId = creditProfileCid
     createdAt = now
 
   proposalCid <- submit platform $ exerciseCmd engineCid MatchOrders with
@@ -70,8 +69,9 @@ testFullMatch = script do
   proposal._2.principal === 1000.0
   proposal._2.interestRate === 4.0
 
-  -- Both parties accept the proposal to create the loan
-  _loanCid <- submitMulti [lender, borrower] [] $ exerciseCmd proposalCid MatchedLoanProposal_Accept
+  -- Both parties accept the proposal; borrower supplies their credit profile ID at accept time.
+  _loanCid <- submitMulti [lender, borrower] [] $ exerciseCmd proposalCid MatchedLoanProposal_Accept with
+    creditProfileId = creditProfileCid
 
   [loan] <- query @Loan lender
   loan._2.principal === 1000.0
@@ -81,7 +81,7 @@ testFullMatch = script do
 -- | Partial fill: bid amount > ask amount. Remainder bid created.
 testPartialFill : Script ()
 testPartialFill = script do
-  (lender, borrower, platform, engineCid, creditProfileCid) <- setupMarketMakerTest
+  (lender, borrower, platform, engineCid, _creditProfileCid) <- setupMarketMakerTest
   now <- getTime
 
   bidCid <- submit lender $ createCmd LenderBid with
@@ -99,7 +99,6 @@ testPartialFill = script do
     amount = 2000.0
     maxInterestRate = 6.0
     duration = 60
-    creditProfileId = creditProfileCid
     createdAt = now
 
   _proposalCid <- submit platform $ exerciseCmd engineCid MatchOrders with
@@ -123,7 +122,7 @@ testPartialFill = script do
 -- | Rate mismatch: bid minInterestRate > ask maxInterestRate. Should fail.
 testRateMismatchRejection : Script ()
 testRateMismatchRejection = script do
-  (lender, borrower, platform, engineCid, creditProfileCid) <- setupMarketMakerTest
+  (lender, borrower, platform, engineCid, _creditProfileCid) <- setupMarketMakerTest
   now <- getTime
 
   bidCid <- submit lender $ createCmd LenderBid with
@@ -141,7 +140,6 @@ testRateMismatchRejection = script do
     amount = 1000.0
     maxInterestRate = 5.0
     duration = 60
-    creditProfileId = creditProfileCid
     createdAt = now
 
   submitMustFail platform $ exerciseCmd engineCid MatchOrders with
@@ -151,7 +149,7 @@ testRateMismatchRejection = script do
 -- | Duration mismatch: ask duration > bid maxDuration. Should fail.
 testDurationMismatchRejection : Script ()
 testDurationMismatchRejection = script do
-  (lender, borrower, platform, engineCid, creditProfileCid) <- setupMarketMakerTest
+  (lender, borrower, platform, engineCid, _creditProfileCid) <- setupMarketMakerTest
   now <- getTime
 
   bidCid <- submit lender $ createCmd LenderBid with
@@ -169,7 +167,6 @@ testDurationMismatchRejection = script do
     amount = 1000.0
     maxInterestRate = 5.0
     duration = 60
-    creditProfileId = creditProfileCid
     createdAt = now
 
   submitMustFail platform $ exerciseCmd engineCid MatchOrders with
@@ -199,7 +196,7 @@ testBidCancellation = script do
 -- | Ask cancellation: borrower cancels their ask.
 testAskCancellation : Script ()
 testAskCancellation = script do
-  (_lender, borrower, platform, _engineCid, creditProfileCid) <- setupMarketMakerTest
+  (_lender, borrower, platform, _engineCid, _creditProfileCid) <- setupMarketMakerTest
   now <- getTime
 
   askCid <- submit borrower $ createCmd BorrowerAsk with
@@ -208,7 +205,6 @@ testAskCancellation = script do
     amount = 1000.0
     maxInterestRate = 5.0
     duration = 60
-    creditProfileId = creditProfileCid
     createdAt = now
 
   submit borrower $ exerciseCmd askCid BorrowerAsk_Cancel

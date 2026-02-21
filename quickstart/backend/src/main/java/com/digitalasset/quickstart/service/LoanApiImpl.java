@@ -407,9 +407,11 @@ public class LoanApiImpl implements LoansApi {
                                                     offer.contractId, choice,
                                                     commandId != null ? commandId : UUID.randomUUID().toString(),
                                                     party)
-                                            .thenApply(resultPair -> {
+                                            .thenApply(loanCid -> {
+                                                // LoanOffer_Accept now returns ContractId<Loan> directly
+                                                // (creditProfileId was removed from the return tuple).
                                                 LoanFundResult result = new LoanFundResult();
-                                                result.setLoanId(resultPair.get_1.getContractId);
+                                                result.setLoanId(loanCid.getContractId);
                                                 logger.info("[fundLoan] completed loanId={}", result.getLoanId());
                                                 return ResponseEntity.ok(result);
                                             })
@@ -912,7 +914,8 @@ public class LoanApiImpl implements LoansApi {
         api.setRequestedAt(toOffsetDateTime(p.getRequestedAt));
         api.setDescription(JsonNullable.of(p.getDescription));
         api.setLoanContractId(p.getLoanContractIdText);
-        api.setCreditProfileId(p.getCreditProfileId.getContractId);
+        // creditProfileId removed from LoanRepaymentRequest (privacy improvement — field was
+        // unused in the repayment choice; credit updates happen via Loan_CompleteRepaymentReceived).
         api.setPrepareDeadlinePassed(!p.getPrepareUntil.isAfter(now));
         api.setSettleDeadlinePassed(!p.getSettleBefore.isAfter(now));
         allocationCid.ifPresent(cid -> api.setAllocationCid(JsonNullable.of(cid.getContractId)));

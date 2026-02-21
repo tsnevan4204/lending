@@ -15,6 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Clock,
   DollarSign,
@@ -176,6 +177,38 @@ function PlaceBidForm({
   )
 }
 
+function TableRowSkeleton() {
+  return (
+    <tr className="border-b border-border last:border-0">
+      <td className="py-3 px-4"><Skeleton className="h-4 w-28" /></td>
+      <td className="py-3 px-4"><Skeleton className="h-4 w-20 ml-auto" /></td>
+      <td className="py-3 px-4"><Skeleton className="h-4 w-12 ml-auto" /></td>
+      <td className="py-3 px-4"><Skeleton className="h-4 w-14 ml-auto" /></td>
+      <td className="py-3 px-4"><Skeleton className="h-4 w-20 ml-auto" /></td>
+      <td className="py-3 px-4"><Skeleton className="h-7 w-16 rounded-lg ml-auto" /></td>
+    </tr>
+  )
+}
+
+function BidCardSkeleton() {
+  return (
+    <div className="flex items-center gap-4 rounded-xl border border-border p-4">
+      <div className="flex flex-col gap-2 flex-1">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-4 w-36" />
+          <Skeleton className="h-4 w-14 rounded-full" />
+        </div>
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-24" />
+        </div>
+      </div>
+      <Skeleton className="h-8 w-16 rounded-lg shrink-0" />
+    </div>
+  )
+}
+
 export function LenderDashboard({
   requests,
   loans,
@@ -193,6 +226,7 @@ export function LenderDashboard({
   onConfirmFundingIntent,
   onCompleteFunding,
   onCompleteRepayment,
+  isLoading,
   onAcceptProposal,
   onRejectProposal,
 }: {
@@ -205,6 +239,7 @@ export function LenderDashboard({
   principalRequests?: ApiPrincipalRequest[]
   repaymentRequests?: ApiRepaymentRequest[]
   matchedProposals?: ApiMatchedProposal[]
+  isLoading?: boolean
   onMakeOffer?: (payload: { loanRequestId: string; amount: number; interestRate: number; duration: number }) => Promise<void>
   onMarkDefault?: (loanContractId: string) => Promise<void>
   onPlaceBid?: (payload: { amount: number; minInterestRate: number; maxDuration: number }) => Promise<void>
@@ -284,6 +319,9 @@ export function LenderDashboard({
               </tr>
             </thead>
             <tbody>
+              {isLoading && openRequests.length === 0 && (
+                [0, 1, 2].map((i) => <TableRowSkeleton key={i} />)
+              )}
               {openRequests.map((request, i) => (
                 <motion.tr
                   key={request.id}
@@ -326,7 +364,15 @@ export function LenderDashboard({
       {/* My Bids */}
       <motion.section variants={fadeUp}>
         <h3 className="text-sm font-semibold text-foreground mb-4">My Liquidity Bids</h3>
-        {myBids.length > 0 ? (
+        {isLoading && myBids.length === 0 ? (
+          <div className="flex flex-col gap-3">
+            {[0, 1].map((i) => (
+              <motion.div key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.1 }}>
+                <BidCardSkeleton />
+              </motion.div>
+            ))}
+          </div>
+        ) : myBids.length > 0 ? (
           <div className="flex flex-col gap-3">
             {myBids.map((bid, i) => (
               <motion.div
@@ -625,7 +671,15 @@ export function LenderDashboard({
       {/* Funded Loans */}
       <motion.section variants={fadeUp}>
         <h3 className="text-sm font-semibold text-foreground mb-4">Funded Loans</h3>
-        {myLoans.length > 0 ? (
+        {isLoading && myLoans.length === 0 ? (
+          <div className="flex flex-col gap-3">
+            {[0, 1].map((i) => (
+              <motion.div key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.1 }}>
+                <BidCardSkeleton />
+              </motion.div>
+            ))}
+          </div>
+        ) : myLoans.length > 0 ? (
           <div className="flex flex-col gap-3">
             {myLoans.map((loan, i) => (
               <motion.div

@@ -1,6 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Shield, TrendingUp, TrendingDown, Minus } from "lucide-react"
 import type { CreditProfile } from "@/lib/mock-data"
 
@@ -25,12 +26,44 @@ function getBarColor(score: number) {
 
 export function CreditScoreCard({
   profile,
+  isLoading,
   className,
 }: {
   profile: CreditProfile
+  isLoading?: boolean
   className?: string
 }) {
   const percentage = ((profile.score - 300) / 550) * 100
+
+  if (isLoading) {
+    return (
+      <div className={cn("rounded-xl border border-border p-5", className)}>
+        <div className="flex items-center gap-2 mb-5">
+          <Skeleton className="size-4 rounded" />
+          <Skeleton className="h-4 w-24" />
+        </div>
+        <div className="flex items-baseline gap-2 mb-4">
+          <Skeleton className="h-10 w-20" />
+          <div className="flex flex-col gap-1">
+            <Skeleton className="h-4 w-14" />
+            <Skeleton className="h-3 w-16" />
+          </div>
+        </div>
+        <div className="mb-5">
+          <Skeleton className="w-full h-1.5 rounded-full" />
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex flex-col items-center rounded-lg bg-secondary py-3 px-1.5 gap-2">
+              <Skeleton className="size-3.5 rounded" />
+              <Skeleton className="h-5 w-8" />
+              <Skeleton className="h-3 w-10" />
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={cn("rounded-xl border border-border p-5", className)}>

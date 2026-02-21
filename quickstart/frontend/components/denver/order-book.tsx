@@ -1,7 +1,9 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
+import { motion } from "motion/react"
 import { cn } from "@/lib/utils"
+import { Skeleton } from "@/components/ui/skeleton"
 import { ArrowUpDown, TrendingUp, TrendingDown, BarChart3, RefreshCw, AlertCircle } from "lucide-react"
 import type { ApiOrderBookResponse, ApiOrderBookTier } from "@/lib/api-types"
 import { getOrderBook } from "@/lib/api"
@@ -176,59 +178,81 @@ export function OrderBook({
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="rounded-xl border border-border p-4">
-          <div className="flex items-center gap-3">
-            <div className="size-9 rounded-full bg-destructive/10 flex items-center justify-center">
-              <TrendingDown className="size-4 text-destructive" />
+        {!data ? (
+          [0, 1, 2, 3].map((i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.07 }}
+              className="rounded-xl border border-border p-4"
+            >
+              <div className="flex items-center gap-3">
+                <Skeleton className="size-9 rounded-full shrink-0" />
+                <div className="flex flex-col gap-2 flex-1">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-5 w-16" />
+                </div>
+              </div>
+            </motion.div>
+          ))
+        ) : (
+          <>
+            <div className="rounded-xl border border-border p-4">
+              <div className="flex items-center gap-3">
+                <div className="size-9 rounded-full bg-destructive/10 flex items-center justify-center">
+                  <TrendingDown className="size-4 text-destructive" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Ask Volume</p>
+                  <p className="text-lg font-bold text-foreground tabular-nums">
+                    {formatCurrency(totalAskVolume)}
+                  </p>
+                </div>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Ask Volume</p>
-              <p className="text-lg font-bold text-foreground tabular-nums">
-                {formatCurrency(totalAskVolume)}
-              </p>
+            <div className="rounded-xl border border-border p-4">
+              <div className="flex items-center gap-3">
+                <div className="size-9 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                  <TrendingUp className="size-4 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Bid Volume</p>
+                  <p className="text-lg font-bold text-foreground tabular-nums">
+                    {formatCurrency(totalBidVolume)}
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        <div className="rounded-xl border border-border p-4">
-          <div className="flex items-center gap-3">
-            <div className="size-9 rounded-full bg-emerald-500/10 flex items-center justify-center">
-              <TrendingUp className="size-4 text-emerald-600 dark:text-emerald-400" />
+            <div className="rounded-xl border border-border p-4">
+              <div className="flex items-center gap-3">
+                <div className="size-9 rounded-full bg-secondary flex items-center justify-center">
+                  <ArrowUpDown className="size-4 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Spread</p>
+                  <p className="text-lg font-bold text-foreground tabular-nums">
+                    {spread != null ? `${spread.toFixed(2)}%` : "N/A"}
+                  </p>
+                </div>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Bid Volume</p>
-              <p className="text-lg font-bold text-foreground tabular-nums">
-                {formatCurrency(totalBidVolume)}
-              </p>
+            <div className="rounded-xl border border-border p-4">
+              <div className="flex items-center gap-3">
+                <div className="size-9 rounded-full bg-secondary flex items-center justify-center">
+                  <BarChart3 className="size-4 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Active Orders</p>
+                  <p className="text-lg font-bold text-foreground tabular-nums">
+                    {asks.reduce((s, t) => s + t.orderCount, 0) +
+                      bids.reduce((s, t) => s + t.orderCount, 0)}
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        <div className="rounded-xl border border-border p-4">
-          <div className="flex items-center gap-3">
-            <div className="size-9 rounded-full bg-secondary flex items-center justify-center">
-              <ArrowUpDown className="size-4 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Spread</p>
-              <p className="text-lg font-bold text-foreground tabular-nums">
-                {spread != null ? `${spread.toFixed(2)}%` : "N/A"}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-xl border border-border p-4">
-          <div className="flex items-center gap-3">
-            <div className="size-9 rounded-full bg-secondary flex items-center justify-center">
-              <BarChart3 className="size-4 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Active Orders</p>
-              <p className="text-lg font-bold text-foreground tabular-nums">
-                {asks.reduce((s, t) => s + t.orderCount, 0) +
-                  bids.reduce((s, t) => s + t.orderCount, 0)}
-              </p>
-            </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
 
       {/* Order Book Table */}
@@ -241,43 +265,90 @@ export function OrderBook({
           <span className="text-right">Orders</span>
         </div>
 
-        {/* Asks (top half) - red, sorted ascending from middle */}
-        <div className="border-b-0">
-          <div className="flex items-center gap-2 px-4 py-2 bg-destructive/[0.03] border-b border-border">
-            <div className="size-2 rounded-full bg-destructive" />
-            <span className="text-xs font-semibold text-destructive">
-              Asks (Lenders)
-            </span>
-            <span className="ml-auto text-xs text-muted-foreground">
-              {asks.reduce((s, t) => s + t.orderCount, 0)} orders
-            </span>
+        {!data ? (
+          /* Skeleton rows shown while initial data loads */
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2 px-4 py-2 bg-destructive/[0.03] border-b border-border">
+              <Skeleton className="size-2 rounded-full" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+            {[0, 1, 2].map((i) => (
+              <motion.div
+                key={`ask-skel-${i}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: i * 0.06 }}
+                className="grid grid-cols-4 px-4 py-3 border-b border-border/40 last:border-0 gap-4"
+              >
+                <Skeleton className="h-4 w-14" />
+                <Skeleton className="h-4 w-16 ml-auto" />
+                <Skeleton className="h-4 w-10 ml-auto" />
+                <Skeleton className="h-4 w-8 ml-auto" />
+              </motion.div>
+            ))}
+            <div className="flex items-center justify-center py-3 bg-muted/50 border-y border-border">
+              <Skeleton className="h-4 w-28" />
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/[0.03] border-b border-border">
+              <Skeleton className="size-2 rounded-full" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+            {[0, 1, 2].map((i) => (
+              <motion.div
+                key={`bid-skel-${i}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 + i * 0.06 }}
+                className="grid grid-cols-4 px-4 py-3 border-b border-border/40 last:border-0 gap-4"
+              >
+                <Skeleton className="h-4 w-14" />
+                <Skeleton className="h-4 w-16 ml-auto" />
+                <Skeleton className="h-4 w-10 ml-auto" />
+                <Skeleton className="h-4 w-8 ml-auto" />
+              </motion.div>
+            ))}
           </div>
-          <OrderBookHalf tiers={sortedAsks} side="ask" maxAmount={maxAmount} />
-        </div>
+        ) : (
+          <>
+            {/* Asks (top half) - red, sorted ascending from middle */}
+            <div className="border-b-0">
+              <div className="flex items-center gap-2 px-4 py-2 bg-destructive/[0.03] border-b border-border">
+                <div className="size-2 rounded-full bg-destructive" />
+                <span className="text-xs font-semibold text-destructive">
+                  Asks (Lenders)
+                </span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {asks.reduce((s, t) => s + t.orderCount, 0)} orders
+                </span>
+              </div>
+              <OrderBookHalf tiers={sortedAsks} side="ask" maxAmount={maxAmount} />
+            </div>
 
-        {/* Spread (center) */}
-        <div className="flex items-center justify-center py-3 bg-muted/50 border-y border-border">
-          <div className="flex items-center gap-2">
-            <ArrowUpDown className="size-3.5 text-muted-foreground" />
-            <span className="text-sm font-bold text-foreground tabular-nums">
-              Spread: {spread != null ? `${spread.toFixed(2)}%` : "—"}
-            </span>
-          </div>
-        </div>
+            {/* Spread (center) */}
+            <div className="flex items-center justify-center py-3 bg-muted/50 border-y border-border">
+              <div className="flex items-center gap-2">
+                <ArrowUpDown className="size-3.5 text-muted-foreground" />
+                <span className="text-sm font-bold text-foreground tabular-nums">
+                  Spread: {spread != null ? `${spread.toFixed(2)}%` : "—"}
+                </span>
+              </div>
+            </div>
 
-        {/* Bids (bottom half) - green, sorted descending from middle */}
-        <div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/[0.03] border-b border-border">
-            <div className="size-2 rounded-full bg-emerald-500" />
-            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-              Bids (Borrowers)
-            </span>
-            <span className="ml-auto text-xs text-muted-foreground">
-              {bids.reduce((s, t) => s + t.orderCount, 0)} orders
-            </span>
-          </div>
-          <OrderBookHalf tiers={sortedBids} side="bid" maxAmount={maxAmount} />
-        </div>
+            {/* Bids (bottom half) - green, sorted descending from middle */}
+            <div>
+              <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/[0.03] border-b border-border">
+                <div className="size-2 rounded-full bg-emerald-500" />
+                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  Bids (Borrowers)
+                </span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {bids.reduce((s, t) => s + t.orderCount, 0)} orders
+                </span>
+              </div>
+              <OrderBookHalf tiers={sortedBids} side="bid" maxAmount={maxAmount} />
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

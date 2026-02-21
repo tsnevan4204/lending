@@ -22,6 +22,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Plus,
   Clock,
@@ -214,6 +215,25 @@ function PlaceAskForm({
   )
 }
 
+function LoanCardSkeleton() {
+  return (
+    <div className="flex items-center gap-4 rounded-xl border border-border p-4">
+      <div className="flex flex-col gap-2 flex-1">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-16 rounded-full" />
+        </div>
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="h-3 w-12" />
+          <Skeleton className="h-3 w-16" />
+        </div>
+      </div>
+      <Skeleton className="h-8 w-20 rounded-lg shrink-0" />
+    </div>
+  )
+}
+
 export function BorrowerDashboard({
   requests,
   offers,
@@ -233,6 +253,7 @@ export function BorrowerDashboard({
   onRequestRepayment,
   onAcceptProposal,
   onRejectProposal,
+  isLoading,
   onCancelAsk,
   onPlaceAsk,
 }: {
@@ -246,6 +267,7 @@ export function BorrowerDashboard({
   repaymentRequests?: ApiRepaymentRequest[]
   fundingIntents?: ApiFundingIntent[]
   matchedProposals?: ApiMatchedProposal[]
+  isLoading?: boolean
   onCreateRequest?: (payload: { amount: number; interestRate: number; duration: number; purpose: string }) => Promise<void>
   onWithdrawRequest?: (contractId: string) => Promise<void>
   onAcceptOffer?: (offerContractId: string, creditProfileId: string) => Promise<void>
@@ -334,6 +356,13 @@ export function BorrowerDashboard({
           <span className="text-xs text-muted-foreground">{myRequests.length} requests</span>
         </div>
         <div className="flex flex-col gap-3">
+          {isLoading && myRequests.length === 0 && (
+            [0, 1, 2].map((i) => (
+              <motion.div key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.08 }}>
+                <LoanCardSkeleton />
+              </motion.div>
+            ))
+          )}
           {myRequests.map((request, i) => (
             <motion.div
               key={request.id}
@@ -546,7 +575,15 @@ export function BorrowerDashboard({
       {/* Active Loans */}
       <motion.section variants={fadeUp}>
         <h3 className="text-sm font-semibold text-foreground mb-4">Active Loans</h3>
-        {myLoans.length > 0 ? (
+        {isLoading && myLoans.length === 0 ? (
+          <div className="flex flex-col gap-3">
+            {[0, 1].map((i) => (
+              <motion.div key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.1 }}>
+                <LoanCardSkeleton />
+              </motion.div>
+            ))}
+          </div>
+        ) : myLoans.length > 0 ? (
           <div className="flex flex-col gap-3">
             {myLoans.map((loan, i) => (
               <motion.div
