@@ -6,7 +6,6 @@
 module Loan.CreditProfile where
 
 import Loan.LoanTypes ()
-import Licensing.Util as Util (require)
 
 -- | Initial credit score for new borrowers.
 initialCreditScore : Int
@@ -29,6 +28,11 @@ maxCreditScore = 850
 
 -- | Credit profile for a borrower. Only the borrower is signatory; no observers.
 --   Enforces privacy: other borrowers and lenders cannot see this contract.
+--
+--   Only workflow-driven choices are exposed. Generic IncreaseScore/DecreaseScore
+--   were removed: they allowed arbitrary score manipulation and were not used by any
+--   loan workflow. Keeping only the semantically bounded choices (RecordSuccessfulLoan,
+--   RecordDefaultedLoan) limits the attack surface.
 template CreditProfile with
     borrower : Party
     creditScore : Int
@@ -39,25 +43,7 @@ template CreditProfile with
   where
     signatory borrower
 
-    -- | Increase score (e.g. after successful repayment).
-    choice CreditProfile_IncreaseScore : ContractId CreditProfile
-      with delta : Int
-      controller borrower
-      do
-        require "Delta must be positive" (delta > 0)
-        let newScore = min maxCreditScore (creditScore + delta)
-        create this with creditScore = newScore
-
-    -- | Decrease score (e.g. after default).
-    choice CreditProfile_DecreaseScore : ContractId CreditProfile
-      with delta : Int
-      controller borrower
-      do
-        require "Delta must be positive" (delta > 0)
-        let newScore = max minCreditScore (creditScore - delta)
-        create this with creditScore = newScore
-
-    -- | Record a successful loan (increments counter and optionally increases score).
+    -- | Record a successful loan repayment (increments counter, increases score by fixed delta).
     choice CreditProfile_RecordSuccessfulLoan : ContractId CreditProfile
       controller borrower
       do
@@ -66,7 +52,7 @@ template CreditProfile with
           successfulLoans = successfulLoans + 1
           creditScore = min maxCreditScore (creditScore + successRepayScoreDelta)
 
-    -- | Record a defaulted loan (increments counter and decreases score).
+    -- | Record a defaulted loan (increments counter, decreases score by fixed delta).
     choice CreditProfile_RecordDefaultedLoan : ContractId CreditProfile
       controller borrower
       do

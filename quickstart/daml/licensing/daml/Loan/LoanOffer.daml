@@ -33,7 +33,10 @@ template LoanOffer with
     observer borrower
 
     -- | Borrower accepts the offer; consumes LoanRequest and LoanOffer, creates Loan.
-    choice LoanOffer_Accept : (ContractId Loan, ContractId CreditProfile)
+    --   Returns only the Loan contract ID. creditProfileId was previously returned here
+    --   too, but since the caller already holds it the return was redundant and caused
+    --   the lender (a stakeholder of this choice) to see it unnecessarily in the result.
+    choice LoanOffer_Accept : ContractId Loan
       with creditProfileId : ContractId CreditProfile
       controller borrower
       do
@@ -43,7 +46,7 @@ template LoanOffer with
         archive loanRequestId
         now <- getTime
         let dueDate = addRelTime now (days durationDays)
-        loanCid <- create Loan with
+        create Loan with
           lender = lender
           borrower = borrower
           principal = amount
@@ -51,8 +54,6 @@ template LoanOffer with
           dueDate = dueDate
           creditProfileId = creditProfileId
           status = Active
-        -- Return updated profile id (caller may exercise RecordSuccessfulLoan later on repay)
-        pure (loanCid, creditProfileId)
 
     -- | Borrower requests token-based funding; creates a FundingIntent for lender confirmation.
     choice LoanOffer_AcceptWithToken : ContractId FundingIntent

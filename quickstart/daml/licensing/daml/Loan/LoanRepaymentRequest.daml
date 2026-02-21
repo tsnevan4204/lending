@@ -8,7 +8,6 @@ import DA.Assert (assertWithinDeadline, (===))
 import DA.Optional (fromSome)
 import DA.TextMap as TextMap
 
-import Loan.CreditProfile
 import Licensing.Util as Util (require)
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV1
@@ -16,6 +15,11 @@ import Splice.Api.Token.AllocationRequestV1
 import Splice.Api.Token.AllocationV1 as Api.Token.AllocationV1
 
 -- | Request for borrower to repay loan using token standard.
+--   creditProfileId is intentionally absent: LoanRepaymentRequest_CompleteRepayment only
+--   executes the token transfer. Credit profile updates happen separately via
+--   Loan_CompleteRepaymentReceived on the Loan contract (which stores creditProfileId).
+--   Removing it here prevents the lender from seeing the borrower's credit profile ID
+--   as a standing observer of this contract.
 template LoanRepaymentRequest
   with
     requestId : Text
@@ -28,7 +32,6 @@ template LoanRepaymentRequest
     requestedAt : Time
     description : Text
     loanContractIdText : Text
-    creditProfileId : ContractId CreditProfile
   where
     signatory borrower
     observer lender

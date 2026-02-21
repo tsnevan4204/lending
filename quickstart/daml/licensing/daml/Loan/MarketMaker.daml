@@ -4,6 +4,11 @@
 -- | Market-making order book: LenderBid, BorrowerAsk, MatchingEngine, and MatchedLoanProposal.
 --   The platform operator matches overlapping bids/asks and creates loan proposals
 --   that both parties must accept before the Loan is finalized.
+--
+--   Privacy notes:
+--   - BorrowerAsk no longer carries creditProfileId; platform operator cannot see it in standing data.
+--   - MatchedLoanProposal no longer carries creditProfileId; lender cannot see it from the proposal.
+--     The borrower supplies their credit profile ID at Accept time (they control it).
 module Loan.MarketMaker where
 
 import DA.Time (addRelTime, days)
@@ -44,13 +49,13 @@ template LenderBid with
 
 -- | A borrower posts a loan request into the order book.
 --   Visible to the borrower (signatory) and platform operator (observer).
+--   creditProfileId is intentionally omitted so the platform cannot see it in standing data.
 template BorrowerAsk with
     borrower : Party
     platformOperator : Party
     amount : Decimal
     maxInterestRate : Decimal
     duration : Int
-    creditProfileId : ContractId CreditProfile
     createdAt : Time
   where
     signatory borrower
@@ -101,11 +106,12 @@ template MatchingEngine with
           principal = matchedAmount
           interestRate = agreedRate
           durationDays = ask.duration
-          creditProfileId = ask.creditProfileId
           matchedAt = now
 
 -- | Proposal created by the matching engine. Both lender and borrower must accept
 --   before the Loan is created. Preserves DAML's multi-signatory authorization model.
+--   creditProfileId is NOT stored here: the lender has no need to see it in standing data.
+--   The borrower supplies it as a choice argument at Accept time.
 template MatchedLoanProposal with
     lender : Party
     borrower : Party
@@ -113,13 +119,17 @@ template MatchedLoanProposal with
     principal : Decimal
     interestRate : Decimal
     durationDays : Int
-    creditProfileId : ContractId CreditProfile
     matchedAt : Time
   where
     signatory platformOperator
     observer lender, borrower
 
+    -- | Both parties accept; borrower provides their credit profile for the resulting loan.
     choice MatchedLoanProposal_Accept : ContractId Loan
+      with
+        creditProfileId : ContractId CreditProfile
+          -- ^ Borrower's credit profile. Supplied at accept time; not stored in the proposal
+          --   so the lender cannot query it from standing contract data.
       controller lender, borrower
       do
         let dueDate = addRelTime matchedAt (days durationDays)
