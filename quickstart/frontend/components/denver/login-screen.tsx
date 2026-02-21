@@ -50,12 +50,12 @@ export function LoginScreen({ onLogin, login, noBackend }: Props) {
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ duration: 0.5, delay: 0.2, type: "spring", stiffness: 200, damping: 15 }}
-            className="size-8 rounded-full bg-primary flex items-center justify-center"
+            className="size-28"
           >
-            <span className="text-primary-foreground font-bold text-sm">D</span>
+            <img src="/logo.png" alt="Logo" className="size-28 object-contain" />
           </motion.div>
-          <span className="text-lg font-semibold tracking-tight text-foreground">
-            Denver Lending
+          <span className="text-3xl font-bold tracking-tight text-foreground">
+            Credix
           </span>
         </div>
         <div className="flex items-center gap-4">
