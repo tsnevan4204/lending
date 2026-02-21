@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import quickstart_licensing.loan.marketmaker.BorrowerAsk;
 import quickstart_licensing.loan.marketmaker.LenderBid;
+import quickstart_licensing.loan.marketmaker.MatchedLoanProposal;
 import quickstart_licensing.loan.creditprofile.CreditProfile;
 
 @RestController
@@ -205,6 +206,76 @@ public class MarketMakerApiImpl implements MarketApi {
         }));
     }
 
+    @Override
+    @WithSpan
+    @GetMapping("/market/matched-proposals")
+    public CompletableFuture<ResponseEntity<List<MatchedProposalResponse>>> listMatchedProposals() {
+        var ctx = tracingCtx(logger, "listMatchedProposals");
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
+                damlRepository.findMatchedLoanProposals(party).thenApply(proposals -> {
+                    List<MatchedProposalResponse> api = proposals.stream()
+                            .map(MarketMakerApiImpl::toMatchedProposalResponse)
+                            .toList();
+                    return ResponseEntity.ok(api);
+                })
+        ));
+    }
+
+    @Override
+    @WithSpan
+    @PostMapping("/market/matched-proposals/{contractId}:accept")
+    public CompletableFuture<ResponseEntity<AcceptMatchedProposal200Response>> acceptMatchedProposal(
+            @PathVariable("contractId") String contractId,
+            @RequestParam("commandId") String commandId) {
+        var ctx = tracingCtx(logger, "acceptMatchedProposal", "contractId", contractId);
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
+                damlRepository.findMatchedProposalById(contractId).thenCompose(opt -> {
+                    var proposal = ensurePresent(opt, "MatchedLoanProposal not found: %s", contractId);
+                    var choice = new MatchedLoanProposal.MatchedLoanProposal_Accept();
+                    String lender = proposal.payload.getLender.getParty;
+                    String borrower = proposal.payload.getBorrower.getParty;
+                    return ledger.exerciseAndGetResultWithParties(proposal.contractId, choice,
+                            commandId != null ? commandId : UUID.randomUUID().toString(),
+                            List.of(lender, borrower))
+                            .thenApply(loanCid -> {
+                                var resp = new AcceptMatchedProposal200Response();
+                                resp.setLoanId(loanCid.getContractId);
+                                return ResponseEntity.ok(resp);
+                            });
+                })
+        ));
+    }
+
+    @Override
+    @WithSpan
+    @PostMapping("/market/matched-proposals/{contractId}:reject")
+    public CompletableFuture<ResponseEntity<Void>> rejectMatchedProposal(
+            @PathVariable("contractId") String contractId,
+            @RequestParam(value = "commandId", required = true) String commandId) {
+        var ctx = tracingCtx(logger, "rejectMatchedProposal", "contractId", contractId);
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
+                damlRepository.findMatchedProposalById(contractId).thenCompose(opt -> {
+                    var proposal = ensurePresent(opt, "MatchedLoanProposal not found: %s", contractId);
+                    var p = proposal.payload;
+                    String lender = p.getLender.getParty;
+                    String borrower = p.getBorrower.getParty;
+                    if (party.equals(lender)) {
+                        var choice = new MatchedLoanProposal.MatchedLoanProposal_Reject();
+                        return ledger.exerciseAndGetResult(proposal.contractId, choice,
+                                commandId != null ? commandId : UUID.randomUUID().toString(), party)
+                                .thenApply(v -> ResponseEntity.<Void>noContent().build());
+                    } else if (party.equals(borrower)) {
+                        var choice = new MatchedLoanProposal.MatchedLoanProposal_Withdraw();
+                        return ledger.exerciseAndGetResult(proposal.contractId, choice,
+                                commandId != null ? commandId : UUID.randomUUID().toString(), party)
+                                .thenApply(v -> ResponseEntity.<Void>noContent().build());
+                    } else {
+                        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not a party to this proposal");
+                    }
+                })
+        ));
+    }
+
     private static LenderBidResponse toLenderBidApi(
             com.digitalasset.quickstart.pqs.Contract<LenderBid> c) {
         var p = c.payload;
@@ -229,6 +300,20 @@ public class MarketMakerApiImpl implements MarketApi {
         api.setMaxInterestRate(p.getMaxInterestRate);
         api.setDuration(p.getDuration.intValue());
         api.setCreatedAt(toOffsetDateTime(p.getCreatedAt));
+        return api;
+    }
+
+    private static MatchedProposalResponse toMatchedProposalResponse(
+            com.digitalasset.quickstart.pqs.Contract<MatchedLoanProposal> c) {
+        var p = c.payload;
+        var api = new MatchedProposalResponse();
+        api.setContractId(c.contractId.getContractId);
+        api.setLender(p.getLender.getParty);
+        api.setBorrower(p.getBorrower.getParty);
+        api.setPrincipal(p.getPrincipal);
+        api.setInterestRate(p.getInterestRate);
+        api.setDurationDays(p.getDurationDays.intValue());
+        api.setMatchedAt(toOffsetDateTime(p.getMatchedAt));
         return api;
     }
 

@@ -13,8 +13,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts"
-import type { LenderBid, BorrowerAsk, OrderBookEntry } from "@/lib/mock-data"
-import { aggregateOrderBook } from "@/lib/mock-data"
+import type { ApiOrderBookResponse, ApiOrderBookTier } from "@/lib/api-types"
 
 function formatCurrency(amount: number) {
   if (amount >= 1000000) return `$${(amount / 1000000).toFixed(1)}M`
@@ -22,11 +21,21 @@ function formatCurrency(amount: number) {
   return `$${amount}`
 }
 
+interface BookEntry {
+  rate: number
+  totalAmount: number
+  count: number
+}
+
+function toBookEntries(tiers: ApiOrderBookTier[]): BookEntry[] {
+  return tiers.map((t) => ({ rate: t.interestRate, totalAmount: t.totalAmount, count: t.orderCount }))
+}
+
 function OrderBookSide({
   entries,
   side,
 }: {
-  entries: OrderBookEntry[]
+  entries: BookEntry[]
   side: "bid" | "ask"
 }) {
   const maxAmount = Math.max(...entries.map((e) => e.totalAmount), 1)
@@ -46,7 +55,7 @@ function OrderBookSide({
             <div
               className={cn(
                 "absolute inset-y-0 right-0 rounded-sm",
-                isBid ? "bg-primary/[0.06]" : "bg-destructive/[0.06]"
+                isBid ? "bg-emerald-500/[0.06]" : "bg-destructive/[0.06]"
               )}
               style={{ width: `${barWidth}%` }}
             />
@@ -54,10 +63,10 @@ function OrderBookSide({
               <span
                 className={cn(
                   "font-medium tabular-nums",
-                  isBid ? "text-primary" : "text-destructive"
+                  isBid ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
                 )}
               >
-                {entry.rate.toFixed(1)}%
+                {entry.rate.toFixed(2)}%
               </span>
               <span className="text-right tabular-nums text-foreground">
                 {formatCurrency(entry.totalAmount)}
@@ -74,29 +83,29 @@ function OrderBookSide({
 }
 
 function DepthChart({
-  bidBook,
-  askBook,
+  askEntries,
+  bidEntries,
 }: {
-  bidBook: OrderBookEntry[]
-  askBook: OrderBookEntry[]
+  askEntries: BookEntry[]
+  bidEntries: BookEntry[]
 }) {
   const chartData = useMemo(() => {
     const allRates = new Set<number>()
-    bidBook.forEach((b) => allRates.add(b.rate))
-    askBook.forEach((a) => allRates.add(a.rate))
+    askEntries.forEach((a) => allRates.add(a.rate))
+    bidEntries.forEach((b) => allRates.add(b.rate))
 
     return Array.from(allRates)
       .sort((a, b) => a - b)
       .map((rate) => {
-        const bid = bidBook.find((b) => b.rate === rate)
-        const ask = askBook.find((a) => a.rate === rate)
+        const ask = askEntries.find((a) => a.rate === rate)
+        const bid = bidEntries.find((b) => b.rate === rate)
         return {
           rate: `${rate}%`,
-          bids: bid ? bid.totalAmount : 0,
           asks: ask ? ask.totalAmount : 0,
+          bids: bid ? bid.totalAmount : 0,
         }
       })
-  }, [bidBook, askBook])
+  }, [askEntries, bidEntries])
 
   return (
     <ResponsiveContainer width="100%" height={240}>
@@ -125,17 +134,17 @@ function DepthChart({
           }}
           formatter={(value: number, name: string) => [
             formatCurrency(value),
-            name === "bids" ? "Lender Bids" : "Borrower Asks",
+            name === "asks" ? "Asks (Lenders)" : "Bids (Borrowers)",
           ]}
         />
-        <Bar dataKey="bids" radius={[4, 4, 0, 0]}>
-          {chartData.map((_, index) => (
-            <Cell key={`bid-${index}`} fill="#00C805" fillOpacity={0.7} />
-          ))}
-        </Bar>
         <Bar dataKey="asks" radius={[4, 4, 0, 0]}>
           {chartData.map((_, index) => (
             <Cell key={`ask-${index}`} fill="#ff5000" fillOpacity={0.7} />
+          ))}
+        </Bar>
+        <Bar dataKey="bids" radius={[4, 4, 0, 0]}>
+          {chartData.map((_, index) => (
+            <Cell key={`bid-${index}`} fill="#00C805" fillOpacity={0.7} />
           ))}
         </Bar>
       </BarChart>
@@ -144,57 +153,52 @@ function DepthChart({
 }
 
 export function MarketDepth({
-  bids,
-  asks,
+  orderBookData,
 }: {
-  bids: LenderBid[]
-  asks: BorrowerAsk[]
+  orderBookData: ApiOrderBookResponse | null
 }) {
-  const { bidBook, askBook } = useMemo(
-    () => aggregateOrderBook(bids, asks),
-    [bids, asks]
-  )
+  const asks = useMemo(() => orderBookData?.asks ?? [], [orderBookData])
+  const bids = useMemo(() => orderBookData?.bids ?? [], [orderBookData])
+  const askEntries = useMemo(() => toBookEntries(asks), [asks])
+  const bidEntries = useMemo(() => toBookEntries(bids), [bids])
 
-  const totalBidLiquidity = bids.reduce((sum, b) => sum + b.remainingAmount, 0)
-  const totalAskDemand = asks.reduce((sum, a) => sum + a.amount, 0)
-
-  const bestBid = bidBook.length > 0 ? Math.min(...bidBook.map((b) => b.rate)) : 0
-  const bestAsk = askBook.length > 0 ? Math.max(...askBook.map((a) => a.rate)) : 0
+  const totalAskVolume = asks.reduce((sum, t) => sum + t.totalAmount, 0)
+  const totalBidVolume = bids.reduce((sum, t) => sum + t.totalAmount, 0)
+  const totalOrders = asks.reduce((s, t) => s + t.orderCount, 0) + bids.reduce((s, t) => s + t.orderCount, 0)
+  const spread = orderBookData?.spread
 
   return (
     <div className="flex flex-col gap-8">
-      {/* Header */}
       <div>
-        <h2 className="text-2xl font-bold text-foreground tracking-tight">Order Book</h2>
+        <h2 className="text-2xl font-bold text-foreground tracking-tight">Market Depth</h2>
         <p className="text-sm text-muted-foreground mt-1">
           Aggregated bids and asks by interest rate
         </p>
       </div>
 
-      {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="rounded-xl border border-border p-4">
-          <div className="flex items-center gap-3">
-            <div className="size-9 rounded-full bg-primary/10 flex items-center justify-center">
-              <TrendingUp className="size-4 text-primary" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Bid Liquidity</p>
-              <p className="text-lg font-bold text-foreground tabular-nums">
-                {formatCurrency(totalBidLiquidity)}
-              </p>
-            </div>
-          </div>
-        </div>
         <div className="rounded-xl border border-border p-4">
           <div className="flex items-center gap-3">
             <div className="size-9 rounded-full bg-destructive/10 flex items-center justify-center">
               <TrendingDown className="size-4 text-destructive" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Ask Demand</p>
+              <p className="text-xs text-muted-foreground">Ask Volume</p>
               <p className="text-lg font-bold text-foreground tabular-nums">
-                {formatCurrency(totalAskDemand)}
+                {formatCurrency(totalAskVolume)}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-border p-4">
+          <div className="flex items-center gap-3">
+            <div className="size-9 rounded-full bg-emerald-500/10 flex items-center justify-center">
+              <TrendingUp className="size-4 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Bid Volume</p>
+              <p className="text-lg font-bold text-foreground tabular-nums">
+                {formatCurrency(totalBidVolume)}
               </p>
             </div>
           </div>
@@ -207,9 +211,7 @@ export function MarketDepth({
             <div>
               <p className="text-xs text-muted-foreground">Spread</p>
               <p className="text-lg font-bold text-foreground tabular-nums">
-                {bestAsk > 0 && bestBid > 0
-                  ? `${(bestAsk - bestBid).toFixed(1)}%`
-                  : "N/A"}
+                {spread != null ? `${spread.toFixed(2)}%` : "N/A"}
               </p>
             </div>
           </div>
@@ -222,53 +224,51 @@ export function MarketDepth({
             <div>
               <p className="text-xs text-muted-foreground">Active Orders</p>
               <p className="text-lg font-bold text-foreground tabular-nums">
-                {bids.length + asks.length}
+                {totalOrders}
               </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Depth Chart */}
       <div className="rounded-xl border border-border p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-sm font-semibold text-foreground">Liquidity by Rate</h3>
           <div className="flex items-center gap-5">
             <div className="flex items-center gap-1.5">
-              <div className="size-2.5 rounded-full bg-primary" />
-              <span className="text-xs text-muted-foreground">Bids (Supply)</span>
+              <div className="size-2.5 rounded-full bg-destructive" />
+              <span className="text-xs text-muted-foreground">Asks (Lenders)</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="size-2.5 rounded-full bg-destructive" />
-              <span className="text-xs text-muted-foreground">Asks (Demand)</span>
+              <div className="size-2.5 rounded-full bg-emerald-500" />
+              <span className="text-xs text-muted-foreground">Bids (Borrowers)</span>
             </div>
           </div>
         </div>
-        <DepthChart bidBook={bidBook} askBook={askBook} />
+        <DepthChart askEntries={askEntries} bidEntries={bidEntries} />
       </div>
 
-      {/* Order Book Tables */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="rounded-xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
-            <div className="size-2 rounded-full bg-primary" />
-            <h3 className="text-sm font-semibold text-foreground">Lender Bids</h3>
+            <div className="size-2 rounded-full bg-destructive" />
+            <h3 className="text-sm font-semibold text-foreground">Asks (Lenders)</h3>
             <span className="ml-auto text-xs text-muted-foreground">
-              {bids.length} orders
+              {asks.reduce((s, t) => s + t.orderCount, 0)} orders
             </span>
           </div>
-          <OrderBookSide entries={bidBook} side="bid" />
+          <OrderBookSide entries={askEntries} side="ask" />
         </div>
 
         <div className="rounded-xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
-            <div className="size-2 rounded-full bg-destructive" />
-            <h3 className="text-sm font-semibold text-foreground">Borrower Asks</h3>
+            <div className="size-2 rounded-full bg-emerald-500" />
+            <h3 className="text-sm font-semibold text-foreground">Bids (Borrowers)</h3>
             <span className="ml-auto text-xs text-muted-foreground">
-              {asks.length} orders
+              {bids.reduce((s, t) => s + t.orderCount, 0)} orders
             </span>
           </div>
-          <OrderBookSide entries={askBook} side="ask" />
+          <OrderBookSide entries={bidEntries} side="bid" />
         </div>
       </div>
     </div>

@@ -26,6 +26,8 @@ This document lists features that appear in the **Denver Lending** frontend (`de
 
 ---
 
+- **Order book troubleshooting (bid borrowers not showing):** The order book "bids" side is built from `BorrowerAsk` contracts via PQS. If bids are always empty: (1) Check backend logs for "BorrowerAsk template not yet in PQS schema (Identifier not found)". If present, ensure the licensing DAR (with Loan.MarketMaker) is deployed and restart PQS (e.g. `make restart-service SERVICE=pqs-app-provider`). (2) Otherwise ensure borrowers create asks via Place Ask / My Order Book Asks so BorrowerAsk contracts exist.
+
 ## 2. Matching / settling (orderbook → loan)
 
 **Frontend:** Copy says “Your bid will be added to the order book and **matched against borrower asks**.”

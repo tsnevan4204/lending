@@ -96,6 +96,99 @@ export interface BorrowerAskCreate {
   creditProfileId: string
 }
 
+// --- Token-based funding flow ---
+
+export interface AcceptOfferWithTokenRequest {
+  creditProfileId: string
+  requestId?: string | null
+  description?: string | null
+  prepareUntilDuration?: string | null
+  settleBeforeDuration?: string | null
+}
+
+export interface ApiFundingIntent {
+  contractId: string
+  requestId: string
+  lender: string
+  borrower: string
+  principal: number
+  interestRate: number
+  durationDays: number
+  prepareUntil: string
+  settleBefore: string
+  requestedAt: string
+  description?: string | null
+  loanRequestId: string
+  offerContractId: string
+  creditProfileId: string
+}
+
+export interface ApiPrincipalRequest {
+  contractId: string
+  requestId: string
+  lender: string
+  borrower: string
+  principal: number
+  interestRate: number
+  durationDays: number
+  prepareUntil: string
+  settleBefore: string
+  requestedAt: string
+  description?: string | null
+  loanRequestId: string
+  offerContractId: string
+  creditProfileId: string
+  allocationCid?: string | null
+  prepareDeadlinePassed: boolean
+  settleDeadlinePassed: boolean
+}
+
+export interface CompleteLoanFundingRequest {
+  allocationContractId: string
+}
+
+// --- Token-based repayment flow ---
+
+export interface RequestRepaymentRequest {
+  requestId?: string | null
+  description?: string | null
+  prepareUntilDuration?: string | null
+  settleBeforeDuration?: string | null
+}
+
+export interface ApiRepaymentRequest {
+  contractId: string
+  requestId: string
+  lender: string
+  borrower: string
+  repaymentAmount: number
+  prepareUntil: string
+  settleBefore: string
+  requestedAt: string
+  description?: string | null
+  loanContractId: string
+  creditProfileId: string
+  allocationCid?: string | null
+  prepareDeadlinePassed: boolean
+  settleDeadlinePassed: boolean
+}
+
+export interface CompleteLoanRepaymentRequest {
+  allocationContractId: string
+}
+
+// --- Matched Loan Proposals ---
+
+export interface ApiMatchedProposal {
+  contractId: string
+  lender: string
+  borrower: string
+  principal: number
+  interestRate: number
+  durationDays: number
+  matchedAt: string
+}
+
 // --- Order Book (aggregated from MarketMaker LenderBid/BorrowerAsk) ---
 
 export interface ApiOrderBookTier {

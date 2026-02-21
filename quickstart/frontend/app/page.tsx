@@ -19,6 +19,7 @@ export default function DenverLendingApp() {
   const {
     authStatus,
     currentUser,
+    walletUrl,
     login,
     logout,
     requests,
@@ -28,6 +29,10 @@ export default function DenverLendingApp() {
     bids,
     asks,
     orderBook,
+    fundingIntents,
+    principalRequests,
+    repaymentRequests,
+    matchedProposals,
     loading,
     error,
     clearError,
@@ -38,6 +43,15 @@ export default function DenverLendingApp() {
     markLoanDefault,
     createLenderBid,
     cancelLenderBid,
+    createBorrowerAsk,
+    cancelBorrowerAsk,
+    acceptProposal,
+    rejectProposal,
+    acceptOfferWithToken,
+    confirmFundingIntent,
+    completeFunding,
+    requestRepayment,
+    completeRepayment,
   } = useDenverData()
 
   // ---- loading / auth states ----
@@ -152,11 +166,22 @@ export default function DenverLendingApp() {
                   requests={requests}
                   offers={offers}
                   loans={loans}
+                  asks={asks}
                   currentParty={partyId}
                   creditProfileId={creditProfile.contractId}
+                  walletUrl={walletUrl}
+                  repaymentRequests={repaymentRequests}
+                  fundingIntents={fundingIntents}
+                  matchedProposals={matchedProposals}
                   onCreateRequest={createLoanRequest}
                   onAcceptOffer={fundLoan}
+                  onAcceptOfferWithToken={acceptOfferWithToken}
                   onRepay={repayLoan}
+                  onRequestRepayment={requestRepayment}
+                  onAcceptProposal={acceptProposal}
+                  onRejectProposal={rejectProposal}
+                  onPlaceAsk={createBorrowerAsk}
+                  onCancelAsk={cancelBorrowerAsk}
                 />
                 <div>
                   <CreditScoreCard profile={creditProfile} />
@@ -170,17 +195,27 @@ export default function DenverLendingApp() {
                 loans={loans}
                 bids={bids}
                 currentParty={partyId}
+                walletUrl={walletUrl}
+                fundingIntents={fundingIntents}
+                principalRequests={principalRequests}
+                repaymentRequests={repaymentRequests}
+                matchedProposals={matchedProposals}
                 onMakeOffer={createLoanOffer}
                 onMarkDefault={markLoanDefault}
                 onPlaceBid={createLenderBid}
                 onCancelBid={cancelLenderBid}
+                onConfirmFundingIntent={confirmFundingIntent}
+                onCompleteFunding={completeFunding}
+                onCompleteRepayment={completeRepayment}
+                onAcceptProposal={acceptProposal}
+                onRejectProposal={rejectProposal}
               />
             )}
 
             {activeView === "orderbook" && (
               <div className="flex flex-col gap-10">
                 <OrderBook orderBookData={orderBook} />
-                <MarketDepth bids={bids} asks={asks} />
+                <MarketDepth orderBookData={orderBook} />
               </div>
             )}
 

@@ -25,6 +25,14 @@ import type {
   LenderBidCreate,
   BorrowerAskCreate,
   ApiOrderBookResponse,
+  AcceptOfferWithTokenRequest,
+  ApiFundingIntent,
+  ApiPrincipalRequest,
+  CompleteLoanFundingRequest,
+  RequestRepaymentRequest,
+  ApiRepaymentRequest,
+  CompleteLoanRepaymentRequest,
+  ApiMatchedProposal,
 } from "@/lib/api-types"
 
 const API_BASE = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "/api") : ""
@@ -288,6 +296,93 @@ export async function markLoanDefault(loanContractId: string): Promise<void> {
   await postApi(`/loans/${encodeURIComponent(loanContractId)}:mark-default?commandId=${encodeURIComponent(commandId())}`)
 }
 
+// --- Token-based funding flow (lender -> borrower) ---
+
+/** Borrower accepts offer with token settlement, creating a FundingIntent. */
+export async function acceptOfferWithToken(
+  offerContractId: string,
+  creditProfileId: string,
+): Promise<{ fundingIntentId: string }> {
+  const body: AcceptOfferWithTokenRequest = { creditProfileId }
+  return postApi<{ fundingIntentId: string }>(
+    `/loans/offer/${encodeURIComponent(offerContractId)}:accept-with-token?commandId=${encodeURIComponent(commandId())}`,
+    body
+  )
+}
+
+/** Lender confirms a funding intent, creating a LoanPrincipalRequest. */
+export async function confirmFundingIntent(
+  intentContractId: string,
+): Promise<{ principalRequestId: string }> {
+  return postApi<{ principalRequestId: string }>(
+    `/loans/funding-intent/${encodeURIComponent(intentContractId)}:confirm?commandId=${encodeURIComponent(commandId())}`
+  )
+}
+
+/** List funding intents visible to the authenticated party. */
+export async function listFundingIntents(): Promise<ApiFundingIntent[]> {
+  try {
+    return await fetchApi<ApiFundingIntent[]>("/loans/funding-intents")
+  } catch {
+    return []
+  }
+}
+
+/** List loan principal requests (lender). */
+export async function listPrincipalRequests(): Promise<ApiPrincipalRequest[]> {
+  try {
+    return await fetchApi<ApiPrincipalRequest[]>("/loans/principal-requests")
+  } catch {
+    return []
+  }
+}
+
+/** Lender completes token funding for a principal request. */
+export async function completeLoanFunding(
+  principalRequestId: string,
+  allocationContractId: string,
+): Promise<{ loanId: string }> {
+  const body: CompleteLoanFundingRequest = { allocationContractId }
+  return postApi<{ loanId: string }>(
+    `/loans/principal-requests/${encodeURIComponent(principalRequestId)}:complete-funding?commandId=${encodeURIComponent(commandId())}`,
+    body
+  )
+}
+
+// --- Token-based repayment flow (borrower -> lender) ---
+
+/** Borrower requests token-based repayment, creating a LoanRepaymentRequest. */
+export async function requestRepayment(
+  loanContractId: string,
+): Promise<{ repaymentRequestId: string }> {
+  const body: RequestRepaymentRequest = {}
+  return postApi<{ repaymentRequestId: string }>(
+    `/loans/${encodeURIComponent(loanContractId)}:request-repayment?commandId=${encodeURIComponent(commandId())}`,
+    body
+  )
+}
+
+/** List loan repayment requests visible to the authenticated party. */
+export async function listRepaymentRequests(): Promise<ApiRepaymentRequest[]> {
+  try {
+    return await fetchApi<ApiRepaymentRequest[]>("/loans/repayment-requests")
+  } catch {
+    return []
+  }
+}
+
+/** Lender completes token-based repayment. */
+export async function completeLoanRepayment(
+  repaymentRequestId: string,
+  allocationContractId: string,
+): Promise<{ creditProfileId: string }> {
+  const body: CompleteLoanRepaymentRequest = { allocationContractId }
+  return postApi<{ creditProfileId: string }>(
+    `/loans/repayment-requests/${encodeURIComponent(repaymentRequestId)}:complete-repayment?commandId=${encodeURIComponent(commandId())}`,
+    body
+  )
+}
+
 // --- Market Making / Order Book ---
 
 function mapLenderBid(b: ApiLenderBid): LenderBid {
@@ -298,7 +393,7 @@ function mapLenderBid(b: ApiLenderBid): LenderBid {
     amount: b.amount,
     remainingAmount: b.remainingAmount,
     minInterestRate: b.minInterestRate,
-    maxDuration: b.maxDuration,
+    maxDuration: daysToMonths(b.maxDuration),
     status: b.remainingAmount <= 0 ? "filled" : b.remainingAmount < b.amount ? "partial" : "active",
     createdAt: b.createdAt,
   }
@@ -311,7 +406,7 @@ function mapBorrowerAsk(a: ApiBorrowerAsk): BorrowerAsk {
     borrower: a.borrower,
     amount: a.amount,
     maxInterestRate: a.maxInterestRate,
-    duration: a.duration,
+    duration: daysToMonths(a.duration),
     status: "active",
     createdAt: a.createdAt,
   }
@@ -346,7 +441,7 @@ export async function createLenderBid(payload: {
   const body: LenderBidCreate = {
     amount: payload.amount,
     minInterestRate: payload.minInterestRate,
-    maxDuration: payload.maxDuration,
+    maxDuration: monthsToDays(payload.maxDuration),
   }
   const raw = await postApi<ApiLenderBid>(
     "/market/lender-bids?commandId=" + encodeURIComponent(commandId()),
@@ -365,7 +460,7 @@ export async function createBorrowerAsk(payload: {
   const body: BorrowerAskCreate = {
     amount: payload.amount,
     maxInterestRate: payload.maxInterestRate,
-    duration: payload.duration,
+    duration: monthsToDays(payload.duration),
     creditProfileId: payload.creditProfileId,
   }
   const raw = await postApi<ApiBorrowerAsk>(
@@ -387,6 +482,31 @@ export async function cancelBorrowerAsk(contractId: string): Promise<void> {
   await fetchApi(`/market/borrower-asks/${encodeURIComponent(contractId)}?commandId=${encodeURIComponent(commandId())}`, {
     method: "DELETE",
   })
+}
+
+// --- Matched Loan Proposals ---
+
+/** List matched loan proposals visible to the authenticated party. */
+export async function listMatchedProposals(): Promise<ApiMatchedProposal[]> {
+  try {
+    return await fetchApi<ApiMatchedProposal[]>("/market/matched-proposals")
+  } catch {
+    return []
+  }
+}
+
+/** Accept a matched loan proposal. */
+export async function acceptMatchedProposal(contractId: string): Promise<{ loanId: string }> {
+  return postApi<{ loanId: string }>(
+    `/market/matched-proposals/${encodeURIComponent(contractId)}:accept?commandId=${encodeURIComponent(commandId())}`
+  )
+}
+
+/** Reject/withdraw a matched loan proposal. */
+export async function rejectMatchedProposal(contractId: string): Promise<void> {
+  await postApi(
+    `/market/matched-proposals/${encodeURIComponent(contractId)}:reject?commandId=${encodeURIComponent(commandId())}`
+  )
 }
 
 // --- Order Book (aggregated from MarketMaker LenderBid/BorrowerAsk) ---

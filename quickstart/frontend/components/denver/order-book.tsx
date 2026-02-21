@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import { cn } from "@/lib/utils"
-import { ArrowUpDown, TrendingUp, TrendingDown, BarChart3, RefreshCw } from "lucide-react"
+import { ArrowUpDown, TrendingUp, TrendingDown, BarChart3, RefreshCw, AlertCircle } from "lucide-react"
 import type { ApiOrderBookResponse, ApiOrderBookTier } from "@/lib/api-types"
 import { getOrderBook } from "@/lib/api"
 
@@ -74,6 +74,7 @@ export function OrderBook({
 }) {
   const [liveData, setLiveData] = useState<ApiOrderBookResponse | null>(orderBookData)
   const [refreshing, setRefreshing] = useState(false)
+  const [pollError, setPollError] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -83,9 +84,16 @@ export function OrderBook({
       inflight = true
       try {
         const data = await getOrderBook()
-        if (!cancelled && data) setLiveData(data)
+        if (!cancelled) {
+          if (data) {
+            setLiveData(data)
+            setPollError(false)
+          } else {
+            setPollError(true)
+          }
+        }
       } catch {
-        // swallow – next poll will retry
+        if (!cancelled) setPollError(true)
       } finally {
         inflight = false
       }
@@ -131,7 +139,10 @@ export function OrderBook({
   const handleRefresh = async () => {
     setRefreshing(true)
     const fresh = await getOrderBook()
-    if (fresh) setLiveData(fresh)
+    if (fresh) {
+      setLiveData(fresh)
+      setPollError(false)
+    }
     setRefreshing(false)
   }
 
@@ -145,14 +156,22 @@ export function OrderBook({
             Real-time aggregated order book depth
           </p>
         </div>
-        <button
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg border border-border hover:border-foreground/20"
-        >
-          <RefreshCw className={cn("size-3", refreshing && "animate-spin")} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          {pollError && (
+            <span className="flex items-center gap-1.5 text-xs text-destructive">
+              <AlertCircle className="size-3" />
+              Update failed
+            </span>
+          )}
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg border border-border hover:border-foreground/20"
+          >
+            <RefreshCw className={cn("size-3", refreshing && "animate-spin")} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Summary Stats */}

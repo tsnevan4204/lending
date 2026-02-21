@@ -171,6 +171,18 @@ public class LedgerApi {
         return exerciseAndGetResult(contractId, choice, commandId, List.of(), actAsParty);
     }
 
+    /** Exercise a choice with multiple actAs parties (e.g. for joint controller choices). */
+    @WithSpan
+    public <T extends Template, Result, C extends Choice<T, Result>>
+    CompletableFuture<Result> exerciseAndGetResultWithParties(
+            ContractId<T> contractId,
+            C choice,
+            String commandId,
+            List<String> actAsParties
+    ) {
+        return exerciseAndGetResult(contractId, choice, commandId, List.of(), actAsParties.get(0), actAsParties);
+    }
+
     @WithSpan
     public <T extends Template, Result, C extends Choice<T, Result>>
     CompletableFuture<Result> exerciseAndGetResult(
@@ -179,6 +191,19 @@ public class LedgerApi {
             String commandId,
             List<CommandsOuterClass.DisclosedContract> disclosedContracts,
             String actAsParty
+    ) {
+        return exerciseAndGetResult(contractId, choice, commandId, disclosedContracts, actAsParty, List.of(actAsParty));
+    }
+
+    @WithSpan
+    public <T extends Template, Result, C extends Choice<T, Result>>
+    CompletableFuture<Result> exerciseAndGetResult(
+            ContractId<T> contractId,
+            C choice,
+            String commandId,
+            List<CommandsOuterClass.DisclosedContract> disclosedContracts,
+            String primaryParty,
+            List<String> actAsParties
     ) {
         var ctx = tracingCtx(logger, "Exercising choice",
                 "commandId", commandId,
@@ -200,8 +225,8 @@ public class LedgerApi {
 
             CommandsOuterClass.Commands.Builder commandsBuilder = CommandsOuterClass.Commands.newBuilder()
                     .setCommandId(commandId)
-                    .addActAs(actAsParty)
-                    .addReadAs(actAsParty)
+                    .addAllActAs(actAsParties)
+                    .addAllReadAs(actAsParties)
                     .addCommands(cmdBuilder.build());
 
             if (disclosedContracts != null && !disclosedContracts.isEmpty()) {
@@ -209,7 +234,7 @@ public class LedgerApi {
             }
 
             var eventFormat = TransactionFilterOuterClass.EventFormat.newBuilder()
-                    .putFiltersByParty(actAsParty, TransactionFilterOuterClass.Filters.newBuilder().build())
+                    .putFiltersByParty(primaryParty, TransactionFilterOuterClass.Filters.newBuilder().build())
                     .build();
             var transactionShape = TransactionFilterOuterClass.TransactionShape.TRANSACTION_SHAPE_LEDGER_EFFECTS;
             var transactionFormat =

@@ -30,15 +30,22 @@ import {
   createLenderBid as apiCreateLenderBid,
   createBorrowerAsk as apiCreateBorrowerAsk,
   cancelLenderBid as apiCancelLenderBid,
+  cancelBorrowerAsk as apiCancelBorrowerAsk,
+  acceptOfferWithToken as apiAcceptOfferWithToken,
+  confirmFundingIntent as apiConfirmFundingIntent,
+  listFundingIntents,
+  listPrincipalRequests,
+  completeLoanFunding as apiCompleteLoanFunding,
+  requestRepayment as apiRequestRepayment,
+  listRepaymentRequests,
+  completeLoanRepayment as apiCompleteLoanRepayment,
+  listMatchedProposals,
+  acceptMatchedProposal as apiAcceptMatchedProposal,
+  rejectMatchedProposal as apiRejectMatchedProposal,
 } from "@/lib/api"
-import type { ApiOrderBookResponse } from "@/lib/api-types"
+import type { ApiOrderBookResponse, ApiFundingIntent, ApiPrincipalRequest, ApiRepaymentRequest, ApiMatchedProposal } from "@/lib/api-types"
 import {
-  mockLoanRequests,
-  mockLoanOffers,
-  mockActiveLoans,
   mockCreditProfile,
-  mockLenderBids,
-  mockBorrowerAsks,
 } from "@/lib/mock-data"
 
 export type AuthStatus = "checking" | "authenticated" | "unauthenticated" | "no-backend"
@@ -48,14 +55,19 @@ export function useDenverData() {
   const [authStatus, setAuthStatus] = useState<AuthStatus>("checking")
   const [currentUser, setCurrentUser] = useState<ApiUser | null>(null)
 
-  // Data state — start with mocks so the UI is never blank
-  const [requests, setRequests] = useState<LoanRequest[]>(mockLoanRequests)
-  const [offers, setOffers] = useState<LoanOffer[]>(mockLoanOffers)
-  const [loans, setLoans] = useState<ActiveLoan[]>(mockActiveLoans)
+  // Data state
+  const [requests, setRequests] = useState<LoanRequest[]>([])
+  const [offers, setOffers] = useState<LoanOffer[]>([])
+  const [loans, setLoans] = useState<ActiveLoan[]>([])
   const [creditProfile, setCreditProfile] = useState<CreditProfile | null>(mockCreditProfile)
-  const [bids, setBids] = useState<LenderBid[]>(mockLenderBids)
-  const [asks, setAsks] = useState<BorrowerAsk[]>(mockBorrowerAsks)
+  const [bids, setBids] = useState<LenderBid[]>([])
+  const [asks, setAsks] = useState<BorrowerAsk[]>([])
   const [orderBook, setOrderBook] = useState<ApiOrderBookResponse | null>(null)
+  const [fundingIntents, setFundingIntents] = useState<ApiFundingIntent[]>([])
+  const [principalRequests, setPrincipalRequests] = useState<ApiPrincipalRequest[]>([])
+  const [repaymentRequests, setRepaymentRequests] = useState<ApiRepaymentRequest[]>([])
+  const [matchedProposals, setMatchedProposals] = useState<ApiMatchedProposal[]>([])
+  const [walletUrl, setWalletUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -65,7 +77,7 @@ export function useDenverData() {
     setLoading(true)
     setError(null)
     try {
-      const [reqs, offs, lns, profile, bidList, askList, ob] = await Promise.all([
+      const [reqs, offs, lns, profile, bidList, askList, ob, intents, principals, repayReqs, proposals] = await Promise.all([
         listLoanRequests(),
         listLoanOffers(),
         listLoans(),
@@ -73,6 +85,10 @@ export function useDenverData() {
         listLenderBids(),
         listBorrowerAsks(),
         getOrderBook(),
+        listFundingIntents(),
+        listPrincipalRequests(),
+        listRepaymentRequests(),
+        listMatchedProposals(),
       ])
       const reqById = new Map(reqs.map((r) => [r.id, r]))
       const enrichedOffers = offs.map((o) => {
@@ -84,9 +100,13 @@ export function useDenverData() {
       setOffers(enrichedOffers)
       setLoans(lns)
       setCreditProfile(profile ?? mockCreditProfile)
-      setBids(bidList.length > 0 ? bidList : mockLenderBids)
-      setAsks(askList.length > 0 ? askList : mockBorrowerAsks)
+      setBids(bidList)
+      setAsks(askList)
       if (ob) setOrderBook(ob)
+      setFundingIntents(intents)
+      setPrincipalRequests(principals)
+      setRepaymentRequests(repayReqs)
+      setMatchedProposals(proposals)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load data")
     } finally {
@@ -118,6 +138,7 @@ export function useDenverData() {
       if (cancelled) return
       if (user) {
         setCurrentUser(user)
+        setWalletUrl(user.walletUrl)
         setAuthStatus("authenticated")
       } else {
         setAuthStatus("unauthenticated")
@@ -139,6 +160,7 @@ export function useDenverData() {
       const user = await loginSharedSecret(username, password)
       if (user) {
         setCurrentUser(user)
+        setWalletUrl(user.walletUrl)
         setAuthStatus("authenticated")
         return true
       }
@@ -151,13 +173,12 @@ export function useDenverData() {
     await logoutUser()
     setCurrentUser(null)
     setAuthStatus("unauthenticated")
-    // Reset to mock data so there's no flash of empty state on next login
-    setRequests(mockLoanRequests)
-    setOffers(mockLoanOffers)
-    setLoans(mockActiveLoans)
-    setCreditProfile(mockCreditProfile)
-    setBids(mockLenderBids)
-    setAsks(mockBorrowerAsks)
+    setRequests([])
+    setOffers([])
+    setLoans([])
+    setCreditProfile(null)
+    setBids([])
+    setAsks([])
   }, [])
 
   const refresh = useCallback(async () => {
@@ -291,10 +312,129 @@ export function useDenverData() {
     [refreshWithRetry]
   )
 
+  const cancelBorrowerAsk = useCallback(
+    async (contractId: string) => {
+      setError(null)
+      try {
+        await apiCancelBorrowerAsk(contractId)
+        await refreshWithRetry(2, 1500)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to cancel ask")
+        throw e
+      }
+    },
+    [refreshWithRetry]
+  )
+
+  // --- Matched Proposals ---
+
+  const acceptProposal = useCallback(
+    async (contractId: string) => {
+      setError(null)
+      try {
+        await apiAcceptMatchedProposal(contractId)
+        await refreshWithRetry(2, 1500)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to accept proposal")
+        throw e
+      }
+    },
+    [refreshWithRetry]
+  )
+
+  const rejectProposal = useCallback(
+    async (contractId: string) => {
+      setError(null)
+      try {
+        await apiRejectMatchedProposal(contractId)
+        await refreshWithRetry(2, 1500)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to reject proposal")
+        throw e
+      }
+    },
+    [refreshWithRetry]
+  )
+
+  // --- Token-based funding (lender -> borrower) ---
+
+  const acceptOfferWithToken = useCallback(
+    async (offerContractId: string, creditProfileId: string) => {
+      setError(null)
+      try {
+        await apiAcceptOfferWithToken(offerContractId, creditProfileId)
+        await refreshWithRetry(2, 1500)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to accept offer with token")
+        throw e
+      }
+    },
+    [refreshWithRetry]
+  )
+
+  const confirmFundingIntent = useCallback(
+    async (intentContractId: string) => {
+      setError(null)
+      try {
+        await apiConfirmFundingIntent(intentContractId)
+        await refreshWithRetry(2, 1500)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to confirm funding intent")
+        throw e
+      }
+    },
+    [refreshWithRetry]
+  )
+
+  const completeFunding = useCallback(
+    async (principalRequestId: string, allocationContractId: string) => {
+      setError(null)
+      try {
+        await apiCompleteLoanFunding(principalRequestId, allocationContractId)
+        await refreshWithRetry(2, 1500)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to complete funding")
+        throw e
+      }
+    },
+    [refreshWithRetry]
+  )
+
+  // --- Token-based repayment (borrower -> lender) ---
+
+  const requestRepayment = useCallback(
+    async (loanContractId: string) => {
+      setError(null)
+      try {
+        await apiRequestRepayment(loanContractId)
+        await refreshWithRetry(2, 1500)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to request repayment")
+        throw e
+      }
+    },
+    [refreshWithRetry]
+  )
+
+  const completeRepayment = useCallback(
+    async (repaymentRequestId: string, allocationContractId: string) => {
+      setError(null)
+      try {
+        await apiCompleteLoanRepayment(repaymentRequestId, allocationContractId)
+        await refreshWithRetry(2, 1500)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to complete repayment")
+        throw e
+      }
+    },
+    [refreshWithRetry]
+  )
+
   return {
     // Auth
     authStatus,
     currentUser,
+    walletUrl,
     login,
     logout,
     // Data
@@ -305,11 +445,15 @@ export function useDenverData() {
     bids,
     asks,
     orderBook,
+    fundingIntents,
+    principalRequests,
+    repaymentRequests,
+    matchedProposals,
     loading,
     error,
     clearError: () => setError(null),
     refresh,
-    // Actions
+    // Simple actions (kept for backward compat)
     createLoanRequest,
     createLoanOffer,
     fundLoan,
@@ -318,5 +462,15 @@ export function useDenverData() {
     createLenderBid,
     createBorrowerAsk,
     cancelLenderBid,
+    cancelBorrowerAsk,
+    // Matched proposals
+    acceptProposal,
+    rejectProposal,
+    // Token-based actions
+    acceptOfferWithToken,
+    confirmFundingIntent,
+    completeFunding,
+    requestRepayment,
+    completeRepayment,
   }
 }

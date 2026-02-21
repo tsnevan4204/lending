@@ -976,6 +976,68 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /market/matched-proposals:
+    get:
+      tags: [Market]
+      summary: List matched loan proposals for the authenticated party
+      operationId: listMatchedProposals
+      responses:
+        '200':
+          description: A list of matched loan proposals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MatchedProposalResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /market/matched-proposals/{contractId}:accept:
+    post:
+      tags: [Market]
+      summary: Accept a matched loan proposal (requires both lender and borrower)
+      operationId: acceptMatchedProposal
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '200':
+          description: Proposal accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  loanId:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /market/matched-proposals/{contractId}:reject:
+    post:
+      tags: [Market]
+      summary: Reject a matched loan proposal
+      operationId: rejectMatchedProposal
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '204':
+          description: Proposal rejected
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /orderbook:
     get:
       tags: [Market]
@@ -1828,6 +1890,26 @@ components:
           type: integer
         message:
           type: string
+
+    MatchedProposalResponse:
+      type: object
+      required: [ contractId, lender, borrower, principal, interestRate, durationDays, matchedAt ]
+      properties:
+        contractId:
+          type: string
+        lender:
+          type: string
+        borrower:
+          type: string
+        principal:
+          type: number
+        interestRate:
+          type: number
+        durationDays:
+          type: integer
+        matchedAt:
+          type: string
+          format: date-time
 
     OrderBookTier:
       type: object

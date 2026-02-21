@@ -536,6 +536,11 @@ public class DamlRepository {
                 .exceptionally(ex -> handlePqsTemplateNotFoundOptional(ex, "LenderBid"));
     }
 
+    /**
+     * All active BorrowerAsk contracts (used for order book bids).
+     * If the result is empty and logs show "BorrowerAsk template not yet in PQS schema",
+     * ensure the licensing DAR (with Loan.MarketMaker) is deployed and restart the PQS pipeline.
+     */
     public CompletableFuture<List<Contract<BorrowerAsk>>> findActiveBorrowerAsks() {
         return pqs.active(BorrowerAsk.class)
                 .exceptionally(ex -> handlePqsTemplateNotFound(ex, "BorrowerAsk"));
@@ -566,6 +571,11 @@ public class DamlRepository {
                 "(payload->>'lender' = ? OR payload->'lender'->>'party' = ? OR payload->>'borrower' = ? OR payload->'borrower'->>'party' = ?)",
                 party, party, party, party)
                 .exceptionally(ex -> handlePqsTemplateNotFound(ex, "MatchedLoanProposal"));
+    }
+
+    public CompletableFuture<Optional<Contract<MatchedLoanProposal>>> findMatchedProposalById(String contractId) {
+        return pqs.contractByContractId(MatchedLoanProposal.class, contractId)
+                .exceptionally(ex -> handlePqsTemplateNotFoundOptional(ex, "MatchedLoanProposal"));
     }
 
 }

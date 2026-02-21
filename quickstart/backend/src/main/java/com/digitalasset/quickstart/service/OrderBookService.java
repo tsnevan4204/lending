@@ -40,6 +40,7 @@ public class OrderBookService {
         var asksFuture = damlRepository.findActiveBorrowerAsks();
 
         return bidsFuture.thenCombine(asksFuture, (lenderBids, borrowerAsks) -> {
+            logger.info("[OrderBook] building order book: lenderBids={} borrowerAsks={}", lenderBids.size(), borrowerAsks.size());
             // Aggregate asks (LenderBids = lenders offering supply) by rate+duration
             var askMap = new LinkedHashMap<String, Tier>();
             for (var c : lenderBids) {

@@ -7,6 +7,7 @@ import com.digitalasset.quickstart.ledger.LedgerApi;
 import com.digitalasset.quickstart.pqs.Contract;
 import com.digitalasset.quickstart.repository.DamlRepository;
 import com.digitalasset.quickstart.security.AuthUtils;
+import com.digitalasset.transcode.java.Party;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -14,6 +15,8 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import quickstart_licensing.loan.marketmaker.BorrowerAsk;
@@ -29,11 +32,49 @@ public class MarketMakerService {
     private final LedgerApi ledger;
     private final AuthUtils auth;
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicBoolean engineBootstrapped = new AtomicBoolean(false);
 
     public MarketMakerService(DamlRepository damlRepository, LedgerApi ledger, AuthUtils auth) {
         this.damlRepository = damlRepository;
         this.ledger = ledger;
         this.auth = auth;
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void bootstrapMatchingEngine() {
+        String platformParty = auth.getAppProviderPartyId();
+        try {
+            var existing = damlRepository.findMatchingEngine(platformParty).join();
+            if (existing.isPresent()) {
+                logger.info("[MarketMakerService] MatchingEngine already exists for platform={}", platformParty);
+                engineBootstrapped.set(true);
+                return;
+            }
+            logger.info("[MarketMakerService] Creating MatchingEngine contract for platform={}", platformParty);
+            MatchingEngine template = new MatchingEngine(new Party(platformParty));
+            ledger.create(template, "bootstrap-matching-engine-" + UUID.randomUUID(), platformParty).join();
+            engineBootstrapped.set(true);
+            logger.info("[MarketMakerService] MatchingEngine contract created successfully");
+        } catch (Exception e) {
+            logger.warn("[MarketMakerService] Failed to bootstrap MatchingEngine (will retry on next matching cycle)", e);
+        }
+    }
+
+    private void ensureMatchingEngine(String platformParty) {
+        if (engineBootstrapped.get()) return;
+        try {
+            var existing = damlRepository.findMatchingEngine(platformParty).join();
+            if (existing.isPresent()) {
+                engineBootstrapped.set(true);
+                return;
+            }
+            MatchingEngine template = new MatchingEngine(new Party(platformParty));
+            ledger.create(template, "bootstrap-matching-engine-" + UUID.randomUUID(), platformParty).join();
+            engineBootstrapped.set(true);
+            logger.info("[MarketMakerService] MatchingEngine contract created (lazy bootstrap)");
+        } catch (Exception e) {
+            logger.debug("[MarketMakerService] MatchingEngine bootstrap retry failed: {}", e.getMessage());
+        }
     }
 
     @Scheduled(fixedDelay = 5000)
@@ -52,6 +93,8 @@ public class MarketMakerService {
 
     public int runMatchingCycle() {
         String platformParty = auth.getAppProviderPartyId();
+
+        ensureMatchingEngine(platformParty);
 
         var engineOpt = damlRepository.findMatchingEngine(platformParty).join();
         if (engineOpt.isEmpty()) {

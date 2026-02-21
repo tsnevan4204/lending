@@ -23,8 +23,12 @@ import {
   Loader2,
   AlertTriangle,
   Wallet,
+  ExternalLink,
+  CheckCircle2,
+  ArrowRight,
 } from "lucide-react"
 import type { LoanRequest, ActiveLoan, LenderBid } from "@/lib/mock-data"
+import type { ApiFundingIntent, ApiPrincipalRequest, ApiRepaymentRequest, ApiMatchedProposal } from "@/lib/api-types"
 
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(amount)
@@ -177,34 +181,64 @@ export function LenderDashboard({
   loans,
   bids,
   currentParty,
+  walletUrl,
+  fundingIntents = [],
+  principalRequests = [],
+  repaymentRequests = [],
+  matchedProposals = [],
   onMakeOffer,
   onMarkDefault,
   onPlaceBid,
   onCancelBid,
+  onConfirmFundingIntent,
+  onCompleteFunding,
+  onCompleteRepayment,
+  onAcceptProposal,
+  onRejectProposal,
 }: {
   requests: LoanRequest[]
   loans: ActiveLoan[]
   bids: LenderBid[]
   currentParty?: string
+  walletUrl?: string | null
+  fundingIntents?: ApiFundingIntent[]
+  principalRequests?: ApiPrincipalRequest[]
+  repaymentRequests?: ApiRepaymentRequest[]
+  matchedProposals?: ApiMatchedProposal[]
   onMakeOffer?: (payload: { loanRequestId: string; amount: number; interestRate: number; duration: number }) => Promise<void>
   onMarkDefault?: (loanContractId: string) => Promise<void>
   onPlaceBid?: (payload: { amount: number; minInterestRate: number; maxDuration: number }) => Promise<void>
   onCancelBid?: (contractId: string) => Promise<void>
+  onConfirmFundingIntent?: (intentContractId: string) => Promise<void>
+  onCompleteFunding?: (principalRequestId: string, allocationContractId: string) => Promise<void>
+  onCompleteRepayment?: (repaymentRequestId: string, allocationContractId: string) => Promise<void>
+  onAcceptProposal?: (contractId: string) => Promise<void>
+  onRejectProposal?: (contractId: string) => Promise<void>
 }) {
   const [offerDialog, setOfferDialog] = useState<LoanRequest | null>(null)
   const [bidDialogOpen, setBidDialogOpen] = useState(false)
-  // Exclude the current party's own requests from the lender marketplace —
-  // a borrower should not be able to offer on their own requests.
   const openRequests = requests.filter(
     (r) => r.status === "open" && (!currentParty || r.borrower !== currentParty)
   )
-  // Filter by the real party ID when available; fall back to showing all if party is unknown
   const myLoans = currentParty
     ? loans.filter((l) => l.lender === currentParty)
     : loans
   const myBids = currentParty
     ? bids.filter((b) => b.lender === currentParty)
     : bids
+  const myFundingIntents = currentParty
+    ? fundingIntents.filter((f) => f.lender === currentParty)
+    : fundingIntents
+  const myPrincipalRequests = currentParty
+    ? principalRequests.filter((p) => p.lender === currentParty)
+    : principalRequests
+  const myRepaymentRequests = currentParty
+    ? repaymentRequests.filter((r) => r.lender === currentParty)
+    : repaymentRequests
+  const myMatchedProposals = currentParty
+    ? matchedProposals.filter((p) => p.lender === currentParty)
+    : matchedProposals
+  const hasPendingActions = myFundingIntents.length > 0 || myPrincipalRequests.length > 0 || myRepaymentRequests.length > 0
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="flex flex-col gap-8">
@@ -331,6 +365,215 @@ export function LenderDashboard({
           </div>
         )}
       </motion.section>
+
+      {/* Matched Proposals */}
+      {myMatchedProposals.length > 0 && (
+        <motion.section variants={fadeUp}>
+          <h3 className="text-sm font-semibold text-foreground mb-4">Matched Proposals</h3>
+          <div className="flex flex-col gap-3">
+            {myMatchedProposals.map((proposal, i) => (
+              <motion.div
+                key={proposal.contractId}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 + i * 0.06, duration: 0.35 }}
+                whileHover={{ y: -2, boxShadow: "0 4px 16px rgba(0,0,0,0.06)" }}
+                className="flex items-center gap-4 rounded-xl border border-primary/20 bg-primary/5 p-4 transition-colors duration-200"
+              >
+                <div className="flex flex-col gap-1 flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground">
+                      Matched: {formatCurrency(proposal.principal)}
+                    </span>
+                    <Badge className="text-[10px] font-medium bg-primary/10 text-primary border-transparent">
+                      awaiting acceptance
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <span>{proposal.interestRate}% APR</span>
+                    <span>{Math.round(proposal.durationDays / 30)}mo</span>
+                    <span>Matched {new Date(proposal.matchedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      size="sm"
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 h-8 text-xs"
+                      onClick={() => onAcceptProposal?.(proposal.contractId)}
+                      disabled={!onAcceptProposal}
+                    >
+                      <CheckCircle2 className="size-3" />Accept
+                    </Button>
+                  </motion.div>
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-xs text-destructive hover:text-destructive hover:bg-destructive/5 h-8"
+                      onClick={() => onRejectProposal?.(proposal.contractId)}
+                      disabled={!onRejectProposal}
+                    >
+                      Reject
+                    </Button>
+                  </motion.div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.section>
+      )}
+
+      {/* Pending Token Actions */}
+      {hasPendingActions && (
+        <motion.section variants={fadeUp}>
+          <h3 className="text-sm font-semibold text-foreground mb-4">Pending Token Actions</h3>
+          <div className="flex flex-col gap-3">
+            {/* Funding intents awaiting lender confirmation */}
+            {myFundingIntents.map((fi, i) => (
+              <motion.div
+                key={`fi-${fi.contractId}`}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 + i * 0.06, duration: 0.35 }}
+                className="flex items-center gap-4 rounded-xl border border-primary/20 bg-primary/5 p-4 transition-colors duration-200"
+              >
+                <div className="flex flex-col gap-1 flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground">
+                      Fund Loan: {formatCurrency(fi.principal)}
+                    </span>
+                    <Badge className="text-[10px] font-medium bg-warning/10 text-foreground border-transparent">
+                      confirm required
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <span>{fi.interestRate}% APR</span>
+                    <span>{fi.durationDays} days</span>
+                    <span>Borrower requested token funding</span>
+                  </div>
+                </div>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Button
+                    size="sm"
+                    className="text-xs h-8 bg-primary text-primary-foreground hover:bg-primary/90"
+                    onClick={() => onConfirmFundingIntent?.(fi.contractId)}
+                    disabled={!onConfirmFundingIntent}
+                  >
+                    <CheckCircle2 className="size-3" />Confirm
+                  </Button>
+                </motion.div>
+              </motion.div>
+            ))}
+
+            {/* Principal requests awaiting lender token allocation */}
+            {myPrincipalRequests.map((pr, i) => {
+              const hasAllocation = !!pr.allocationCid
+              return (
+                <motion.div
+                  key={`pr-${pr.contractId}`}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.15 + i * 0.06, duration: 0.35 }}
+                  className="flex items-center gap-4 rounded-xl border border-primary/20 bg-primary/5 p-4 transition-colors duration-200"
+                >
+                  <div className="flex flex-col gap-1 flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-foreground">
+                        Fund Loan: {formatCurrency(pr.principal)}
+                      </span>
+                      <Badge className={cn("text-[10px] font-medium",
+                        hasAllocation
+                          ? "bg-primary/10 text-primary border-transparent"
+                          : "bg-warning/10 text-foreground border-transparent"
+                      )}>
+                        {hasAllocation ? "ready to complete" : "allocate tokens"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>{pr.interestRate}% APR</span>
+                      <span>{pr.durationDays} days</span>
+                    </div>
+                  </div>
+                  {!hasAllocation && walletUrl && (
+                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-8 gap-1.5"
+                        onClick={() => window.open(walletUrl, "_blank", "noopener")}
+                      >
+                        <Wallet className="size-3" />Allocate in Wallet
+                        <ExternalLink className="size-3" />
+                      </Button>
+                    </motion.div>
+                  )}
+                  {hasAllocation && (
+                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                      <Button
+                        size="sm"
+                        className="text-xs h-8 bg-primary text-primary-foreground hover:bg-primary/90"
+                        onClick={() => pr.allocationCid && onCompleteFunding?.(pr.contractId, pr.allocationCid)}
+                        disabled={!onCompleteFunding}
+                      >
+                        <CheckCircle2 className="size-3" />Complete Funding
+                      </Button>
+                    </motion.div>
+                  )}
+                </motion.div>
+              )
+            })}
+
+            {/* Repayment requests awaiting lender completion */}
+            {myRepaymentRequests.map((rr, i) => {
+              const hasAllocation = !!rr.allocationCid
+              return (
+                <motion.div
+                  key={`rr-${rr.contractId}`}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.15 + i * 0.06, duration: 0.35 }}
+                  className="flex items-center gap-4 rounded-xl border border-border p-4 transition-colors duration-200"
+                >
+                  <div className="flex flex-col gap-1 flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-foreground">
+                        Repayment: {formatCurrency(rr.repaymentAmount)}
+                      </span>
+                      <Badge className={cn("text-[10px] font-medium",
+                        hasAllocation
+                          ? "bg-primary/10 text-primary border-transparent"
+                          : "bg-warning/10 text-foreground border-transparent"
+                      )}>
+                        {hasAllocation ? "ready to complete" : "awaiting borrower"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>From borrower</span>
+                      <span>Requested {formatDate(rr.requestedAt)}</span>
+                    </div>
+                  </div>
+                  {hasAllocation && (
+                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                      <Button
+                        size="sm"
+                        className="text-xs h-8 bg-primary text-primary-foreground hover:bg-primary/90"
+                        onClick={() => rr.allocationCid && onCompleteRepayment?.(rr.contractId, rr.allocationCid)}
+                        disabled={!onCompleteRepayment}
+                      >
+                        <CheckCircle2 className="size-3" />Complete Repayment
+                      </Button>
+                    </motion.div>
+                  )}
+                  {!hasAllocation && (
+                    <span className="text-xs text-muted-foreground">Borrower allocating tokens...</span>
+                  )}
+                </motion.div>
+              )
+            })}
+          </div>
+        </motion.section>
+      )}
 
       {/* Funded Loans */}
       <motion.section variants={fadeUp}>
