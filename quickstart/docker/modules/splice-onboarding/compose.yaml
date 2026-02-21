@@ -34,9 +34,9 @@ services:
     healthcheck:
       test: ["CMD", "bash", "/app/health-check.sh"]
       interval: 15s
-      timeout: 300s
+      timeout: 600s
       retries: 80
-      start_period: 420s
+      start_period: 600s
     entrypoint: [ "/entrypoint.sh", "--init" ]
     stdin_open: true
     tty: true
