@@ -80,7 +80,11 @@ public class LedgerApi {
         return create(entity, commandId, appProviderParty);
     }
 
-    /** Create a contract acting as the given party (for party-scoped templates e.g. loans). */
+    /**
+     * Create a contract acting as the given party (for party-scoped templates e.g. loans).
+     * Uses the synchronous command service so the future completes only after the
+     * transaction is committed on the ledger (not just accepted).
+     */
     @WithSpan
     public <T extends Template> CompletableFuture<Void> create(
             T entity,
@@ -96,8 +100,41 @@ public class LedgerApi {
         return traceWithStartEvent(ctx, () -> {
             CommandsOuterClass.Command.Builder command = CommandsOuterClass.Command.newBuilder();
             ValueOuterClass.Value payload = dto2Proto.template(entity.templateId()).convert(entity);
-            command.getCreateBuilder().setTemplateId(toIdentifier(entity.templateId())).setCreateArguments(payload.getRecord());
-            return submitCommands(List.of(command.build()), commandId, actAsParty).thenApply(submitResponse -> null);
+            command.getCreateBuilder()
+                    .setTemplateId(toIdentifier(entity.templateId()))
+                    .setCreateArguments(payload.getRecord());
+
+            CommandsOuterClass.Commands.Builder commandsBuilder = CommandsOuterClass.Commands.newBuilder()
+                    .setCommandId(commandId)
+                    .addActAs(actAsParty)
+                    .addReadAs(actAsParty)
+                    .addCommands(command.build());
+
+            var eventFormat = TransactionFilterOuterClass.EventFormat.newBuilder()
+                    .putFiltersByParty(actAsParty, TransactionFilterOuterClass.Filters.newBuilder().build())
+                    .build();
+            var transactionFormat = TransactionFilterOuterClass.TransactionFormat.newBuilder()
+                    .setEventFormat(eventFormat)
+                    .setTransactionShape(TransactionFilterOuterClass.TransactionShape.TRANSACTION_SHAPE_LEDGER_EFFECTS)
+                    .build();
+
+            CommandServiceOuterClass.SubmitAndWaitForTransactionRequest request =
+                    CommandServiceOuterClass.SubmitAndWaitForTransactionRequest.newBuilder()
+                            .setCommands(commandsBuilder.build())
+                            .setTransactionFormat(transactionFormat)
+                            .build();
+
+            addEventWithAttributes(Span.current(), "built ledger create request", Map.of());
+            logger.info("Submitting ledger create command (waiting for commit)");
+            return toCompletableFuture(commands.submitAndWaitForTransaction(request))
+                    .thenApply(response -> {
+                        long offset = response.getTransaction().getOffset();
+                        Map<String, Object> attrs = new HashMap<>();
+                        attrs.put("ledgerOffset", offset);
+                        setSpanAttributes(Span.current(), attrs);
+                        logInfo(logger, "Contract created (committed)", attrs);
+                        return (Void) null;
+                    });
         });
     }
 

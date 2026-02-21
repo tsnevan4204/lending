@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -220,7 +221,10 @@ export function LenderDashboard({
             </motion.div>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Place Lender Bid</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Place Lender Bid</DialogTitle>
+              <DialogDescription>Specify bid parameters for the lending order book.</DialogDescription>
+            </DialogHeader>
             <PlaceBidForm onClose={() => setBidDialogOpen(false)} onSubmit={onPlaceBid} />
           </DialogContent>
         </Dialog>
@@ -269,7 +273,10 @@ export function LenderDashboard({
                         </motion.div>
                       </DialogTrigger>
                       <DialogContent>
-                        <DialogHeader><DialogTitle>Make an Offer</DialogTitle></DialogHeader>
+                        <DialogHeader>
+                          <DialogTitle>Make an Offer</DialogTitle>
+                          <DialogDescription>Create a loan offer for this request.</DialogDescription>
+                        </DialogHeader>
                         <MakeOfferForm request={request} onClose={() => setOfferDialog(null)} onSubmit={onMakeOffer} />
                       </DialogContent>
                     </Dialog>

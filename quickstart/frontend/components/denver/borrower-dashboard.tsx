@@ -16,6 +16,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -189,7 +190,10 @@ export function BorrowerDashboard({
             </motion.div>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>New Loan Request</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>New Loan Request</DialogTitle>
+              <DialogDescription>Fill in the details for your loan request.</DialogDescription>
+            </DialogHeader>
             <LoanRequestForm onClose={() => setDialogOpen(false)} onSubmit={onCreateRequest} />
           </DialogContent>
         </Dialog>

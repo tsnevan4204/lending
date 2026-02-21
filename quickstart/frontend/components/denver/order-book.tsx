@@ -75,15 +75,23 @@ export function OrderBook({
   const [liveData, setLiveData] = useState<ApiOrderBookResponse | null>(orderBookData)
   const [refreshing, setRefreshing] = useState(false)
 
-  // Poll for live data every 3 seconds
   useEffect(() => {
     let cancelled = false
+    let inflight = false
     const poll = async () => {
-      const data = await getOrderBook()
-      if (!cancelled && data) setLiveData(data)
+      if (inflight) return
+      inflight = true
+      try {
+        const data = await getOrderBook()
+        if (!cancelled && data) setLiveData(data)
+      } catch {
+        // swallow – next poll will retry
+      } finally {
+        inflight = false
+      }
     }
     poll()
-    const interval = setInterval(poll, 3000)
+    const interval = setInterval(poll, 5000)
     return () => {
       cancelled = true
       clearInterval(interval)

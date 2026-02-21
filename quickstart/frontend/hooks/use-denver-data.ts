@@ -74,7 +74,6 @@ export function useDenverData() {
         listBorrowerAsks(),
         getOrderBook(),
       ])
-      // Enrich offers with duration from their linked requests
       const reqById = new Map(reqs.map((r) => [r.id, r]))
       const enrichedOffers = offs.map((o) => {
         const req = reqById.get(o.loanRequestId)
@@ -94,6 +93,16 @@ export function useDenverData() {
       setLoading(false)
     }
   }, [])
+
+  const refreshWithRetry = useCallback(
+    async (attempts = 3, delayMs = 1000) => {
+      for (let i = 0; i < attempts; i++) {
+        await sleep(delayMs)
+        await loadRealData()
+      }
+    },
+    [loadRealData]
+  )
 
   // On mount: check auth state
   useEffect(() => {
@@ -160,22 +169,28 @@ export function useDenverData() {
       setError(null)
       try {
         await apiCreateLoanRequest(payload)
-        // Also create a BorrowerAsk so it appears in the order book
-        // and can be matched by the matching engine
-        const cpId = creditProfile?.contractId ?? mockCreditProfile.contractId ?? ""
-        await apiCreateBorrowerAsk({
-          amount: payload.amount,
-          maxInterestRate: payload.interestRate,
-          duration: payload.duration,
-          creditProfileId: cpId,
-        })
-        await loadRealData()
+
+        let cpId = creditProfile?.contractId
+        if (!cpId) {
+          const freshProfile = await getCreditProfile()
+          cpId = freshProfile?.contractId
+        }
+        if (cpId) {
+          await apiCreateBorrowerAsk({
+            amount: payload.amount,
+            maxInterestRate: payload.interestRate,
+            duration: payload.duration,
+            creditProfileId: cpId,
+          })
+        }
+
+        await refreshWithRetry(2, 1500)
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to create loan request")
         throw e
       }
     },
-    [loadRealData, creditProfile]
+    [refreshWithRetry, creditProfile]
   )
 
   const createLoanOffer = useCallback(
@@ -183,13 +198,13 @@ export function useDenverData() {
       setError(null)
       try {
         await apiCreateLoanOffer(payload)
-        await loadRealData()
+        await refreshWithRetry(2, 1500)
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to create loan offer")
         throw e
       }
     },
-    [loadRealData]
+    [refreshWithRetry]
   )
 
   const fundLoan = useCallback(
@@ -197,14 +212,13 @@ export function useDenverData() {
       setError(null)
       try {
         await apiFundLoan(offerContractId, creditProfileId)
-        await sleep(1500)
-        await loadRealData()
+        await refreshWithRetry(2, 1500)
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to fund loan")
         throw e
       }
     },
-    [loadRealData]
+    [refreshWithRetry]
   )
 
   const repayLoan = useCallback(
@@ -212,14 +226,13 @@ export function useDenverData() {
       setError(null)
       try {
         await apiRepayLoan(loanContractId)
-        await sleep(1500)
-        await loadRealData()
+        await refreshWithRetry(2, 1500)
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to repay loan")
         throw e
       }
     },
-    [loadRealData]
+    [refreshWithRetry]
   )
 
   const markLoanDefault = useCallback(
@@ -227,14 +240,13 @@ export function useDenverData() {
       setError(null)
       try {
         await apiMarkLoanDefault(loanContractId)
-        await sleep(1500)
-        await loadRealData()
+        await refreshWithRetry(2, 1500)
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to mark loan as defaulted")
         throw e
       }
     },
-    [loadRealData]
+    [refreshWithRetry]
   )
 
   const createLenderBid = useCallback(
@@ -242,14 +254,13 @@ export function useDenverData() {
       setError(null)
       try {
         await apiCreateLenderBid(payload)
-        await sleep(1500)
-        await loadRealData()
+        await refreshWithRetry(2, 1500)
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to create lender bid")
         throw e
       }
     },
-    [loadRealData]
+    [refreshWithRetry]
   )
 
   const createBorrowerAsk = useCallback(
@@ -257,14 +268,13 @@ export function useDenverData() {
       setError(null)
       try {
         await apiCreateBorrowerAsk(payload)
-        await sleep(1500)
-        await loadRealData()
+        await refreshWithRetry(2, 1500)
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to create borrower ask")
         throw e
       }
     },
-    [loadRealData]
+    [refreshWithRetry]
   )
 
   const cancelLenderBid = useCallback(
@@ -272,14 +282,13 @@ export function useDenverData() {
       setError(null)
       try {
         await apiCancelLenderBid(contractId)
-        await sleep(1500)
-        await loadRealData()
+        await refreshWithRetry(2, 1500)
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to cancel bid")
         throw e
       }
     },
-    [loadRealData]
+    [refreshWithRetry]
   )
 
   return {
