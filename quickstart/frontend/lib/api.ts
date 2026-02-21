@@ -389,24 +389,6 @@ export async function cancelBorrowerAsk(contractId: string): Promise<void> {
   })
 }
 
-/** Platform stats. Not implemented in backend yet; return null so UI can use mock. */
-export async function getPlatformStats(): Promise<{
-  totalValueLocked: number
-  totalLoansOriginated: number
-  averageInterestRate: number
-  activeLoans: number
-  totalLenders: number
-  totalBorrowers: number
-} | null> {
-  try {
-    const res = await fetch(`${API_BASE}/platform-stats`, { credentials: "include" })
-    if (res.status !== 200) return null
-    return res.json()
-  } catch {
-    return null
-  }
-}
-
 // --- Order Book (aggregated from MarketMaker LenderBid/BorrowerAsk) ---
 
 /** Fetch the aggregated order book (public endpoint, no auth required). */

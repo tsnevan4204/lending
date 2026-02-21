@@ -5,17 +5,15 @@ import { AnimatePresence, motion } from "motion/react"
 import { LogOut, Loader2, X } from "lucide-react"
 import { AppSidebar } from "@/components/denver/app-sidebar"
 import { LoginScreen } from "@/components/denver/login-screen"
-import { OverviewDashboard } from "@/components/denver/overview-dashboard"
 import { BorrowerDashboard } from "@/components/denver/borrower-dashboard"
 import { LenderDashboard } from "@/components/denver/lender-dashboard"
 import { MarketDepth } from "@/components/denver/market-depth"
 import { OrderBook } from "@/components/denver/order-book"
 import { CreditScoreCard } from "@/components/denver/credit-score-card"
-import { PrivacyView } from "@/components/denver/privacy-view"
 import { useDenverData } from "@/hooks/use-denver-data"
 
 export default function DenverLendingApp() {
-  const [activeView, setActiveView] = useState("overview")
+  const [activeView, setActiveView] = useState("borrower")
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   const {
@@ -29,7 +27,6 @@ export default function DenverLendingApp() {
     creditProfile,
     bids,
     asks,
-    platformStats,
     orderBook,
     loading,
     error,
@@ -62,7 +59,7 @@ export default function DenverLendingApp() {
         noBackend={authStatus === "no-backend"}
         login={login}
         onLogin={() => {
-          setActiveView("overview")
+          setActiveView("borrower")
         }}
       />
     )
@@ -149,13 +146,6 @@ export default function DenverLendingApp() {
             transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
             className="p-8 max-w-6xl"
           >
-            {activeView === "overview" && (
-              <OverviewDashboard
-                stats={platformStats}
-                recentLoans={loans}
-              />
-            )}
-
             {activeView === "borrower" && (
               <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-8">
                 <BorrowerDashboard
@@ -194,7 +184,6 @@ export default function DenverLendingApp() {
               </div>
             )}
 
-            {activeView === "privacy" && <PrivacyView />}
           </motion.div>
         </AnimatePresence>
       </main>

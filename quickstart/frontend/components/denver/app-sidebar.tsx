@@ -3,11 +3,9 @@
 import { cn } from "@/lib/utils"
 import { motion, AnimatePresence } from "motion/react"
 import {
-  LayoutDashboard,
   FileText,
   HandCoins,
   BarChart3,
-  Shield,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -27,11 +25,9 @@ type NavItem = {
 }
 
 const navItems: NavItem[] = [
-  { label: "Overview", icon: LayoutDashboard, value: "overview" },
   { label: "My Loans", icon: FileText, value: "borrower" },
   { label: "Marketplace", icon: HandCoins, value: "lender" },
   { label: "Order Book", icon: BarChart3, value: "orderbook" },
-  { label: "Privacy", icon: Shield, value: "privacy" },
 ]
 
 export function AppSidebar({

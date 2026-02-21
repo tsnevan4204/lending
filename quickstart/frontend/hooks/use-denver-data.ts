@@ -21,7 +21,6 @@ import {
   getCreditProfile,
   listLenderBids,
   listBorrowerAsks,
-  getPlatformStats,
   getOrderBook,
   createLoanRequest as apiCreateLoanRequest,
   createLoanOffer as apiCreateLoanOffer,
@@ -31,7 +30,6 @@ import {
   createLenderBid as apiCreateLenderBid,
   createBorrowerAsk as apiCreateBorrowerAsk,
   cancelLenderBid as apiCancelLenderBid,
-  cancelBorrowerAsk as apiCancelBorrowerAsk,
 } from "@/lib/api"
 import type { ApiOrderBookResponse } from "@/lib/api-types"
 import {
@@ -41,7 +39,6 @@ import {
   mockCreditProfile,
   mockLenderBids,
   mockBorrowerAsks,
-  mockPlatformStats,
 } from "@/lib/mock-data"
 
 export type AuthStatus = "checking" | "authenticated" | "unauthenticated" | "no-backend"
@@ -58,7 +55,6 @@ export function useDenverData() {
   const [creditProfile, setCreditProfile] = useState<CreditProfile | null>(mockCreditProfile)
   const [bids, setBids] = useState<LenderBid[]>(mockLenderBids)
   const [asks, setAsks] = useState<BorrowerAsk[]>(mockBorrowerAsks)
-  const [platformStats, setPlatformStats] = useState(mockPlatformStats)
   const [orderBook, setOrderBook] = useState<ApiOrderBookResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -69,14 +65,13 @@ export function useDenverData() {
     setLoading(true)
     setError(null)
     try {
-      const [reqs, offs, lns, profile, bidList, askList, stats, ob] = await Promise.all([
+      const [reqs, offs, lns, profile, bidList, askList, ob] = await Promise.all([
         listLoanRequests(),
         listLoanOffers(),
         listLoans(),
         getCreditProfile(),
         listLenderBids(),
         listBorrowerAsks(),
-        getPlatformStats(),
         getOrderBook(),
       ])
       // Enrich offers with duration from their linked requests
@@ -92,7 +87,6 @@ export function useDenverData() {
       setCreditProfile(profile ?? mockCreditProfile)
       setBids(bidList.length > 0 ? bidList : mockLenderBids)
       setAsks(askList.length > 0 ? askList : mockBorrowerAsks)
-      if (stats) setPlatformStats(stats)
       if (ob) setOrderBook(ob)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load data")
@@ -155,7 +149,6 @@ export function useDenverData() {
     setCreditProfile(mockCreditProfile)
     setBids(mockLenderBids)
     setAsks(mockBorrowerAsks)
-    setPlatformStats(mockPlatformStats)
   }, [])
 
   const refresh = useCallback(async () => {
@@ -289,21 +282,6 @@ export function useDenverData() {
     [loadRealData]
   )
 
-  const cancelBorrowerAsk = useCallback(
-    async (contractId: string) => {
-      setError(null)
-      try {
-        await apiCancelBorrowerAsk(contractId)
-        await sleep(1500)
-        await loadRealData()
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to cancel ask")
-        throw e
-      }
-    },
-    [loadRealData]
-  )
-
   return {
     // Auth
     authStatus,
@@ -317,7 +295,6 @@ export function useDenverData() {
     creditProfile: creditProfile ?? mockCreditProfile,
     bids,
     asks,
-    platformStats,
     orderBook,
     loading,
     error,
@@ -332,6 +309,5 @@ export function useDenverData() {
     createLenderBid,
     createBorrowerAsk,
     cancelLenderBid,
-    cancelBorrowerAsk,
   }
 }

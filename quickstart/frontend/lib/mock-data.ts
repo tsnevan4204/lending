@@ -282,12 +282,3 @@ export function aggregateOrderBook(bids: LenderBid[], asks: BorrowerAsk[]): {
   return { bidBook, askBook }
 }
 
-// Platform stats
-export const mockPlatformStats = {
-  totalValueLocked: 2450000,
-  totalLoansOriginated: 847,
-  averageInterestRate: 7.2,
-  activeLoans: 156,
-  totalLenders: 42,
-  totalBorrowers: 213,
-}

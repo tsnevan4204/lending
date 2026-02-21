@@ -5,6 +5,7 @@ node_modules
 # Next.js
 .next
 out
+dist
 
 # Debug
 npm-debug.log*
