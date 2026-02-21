@@ -217,6 +217,7 @@ export function LenderDashboard({
 }) {
   const [offerDialog, setOfferDialog] = useState<LoanRequest | null>(null)
   const [bidDialogOpen, setBidDialogOpen] = useState(false)
+  const [manualAllocId, setManualAllocId] = useState<Record<string, string>>({})
   const openRequests = requests.filter(
     (r) => r.status === "open" && (!currentParty || r.borrower !== currentParty)
   )
@@ -475,50 +476,73 @@ export function LenderDashboard({
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.15 + i * 0.06, duration: 0.35 }}
-                  className="flex items-center gap-4 rounded-xl border border-primary/20 bg-primary/5 p-4 transition-colors duration-200"
+                  className="rounded-xl border border-primary/20 bg-primary/5 p-4 transition-colors duration-200"
                 >
-                  <div className="flex flex-col gap-1 flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-foreground">
-                        Fund Loan: {formatCurrency(pr.principal)}
-                      </span>
-                      <Badge className={cn("text-[10px] font-medium",
-                        hasAllocation
-                          ? "bg-primary/10 text-primary border-transparent"
-                          : "bg-warning/10 text-foreground border-transparent"
-                      )}>
-                        {hasAllocation ? "ready to complete" : "allocate tokens"}
-                      </Badge>
+                  <div className="flex items-center gap-4">
+                    <div className="flex flex-col gap-1 flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-foreground">
+                          Fund Loan: {formatCurrency(pr.principal)}
+                        </span>
+                        <Badge className={cn("text-[10px] font-medium",
+                          hasAllocation
+                            ? "bg-primary/10 text-primary border-transparent"
+                            : "bg-warning/10 text-foreground border-transparent"
+                        )}>
+                          {hasAllocation ? "ready to complete" : "allocate tokens"}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <span>{pr.interestRate}% APR</span>
+                        <span>{pr.durationDays} days</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <span>{pr.interestRate}% APR</span>
-                      <span>{pr.durationDays} days</span>
-                    </div>
+                    {!hasAllocation && walletUrl && (
+                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs h-8 gap-1.5 shrink-0"
+                          onClick={() => window.open(walletUrl, "_blank", "noopener")}
+                        >
+                          <Wallet className="size-3" />Allocate in Wallet
+                          <ExternalLink className="size-3" />
+                        </Button>
+                      </motion.div>
+                    )}
+                    {hasAllocation && (
+                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                        <Button
+                          size="sm"
+                          className="text-xs h-8 bg-primary text-primary-foreground hover:bg-primary/90 shrink-0"
+                          onClick={() => pr.allocationCid && onCompleteFunding?.(pr.contractId, pr.allocationCid)}
+                          disabled={!onCompleteFunding}
+                        >
+                          <CheckCircle2 className="size-3" />Complete Funding
+                        </Button>
+                      </motion.div>
+                    )}
                   </div>
-                  {!hasAllocation && walletUrl && (
-                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  {!hasAllocation && (
+                    <div className="mt-3 flex items-center gap-2">
+                      <Input
+                        className="h-7 text-xs flex-1"
+                        placeholder="Or paste allocation contract ID to complete manually…"
+                        value={manualAllocId[pr.contractId] ?? ""}
+                        onChange={(e) => setManualAllocId((prev) => ({ ...prev, [pr.contractId]: e.target.value }))}
+                      />
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="text-xs h-8 gap-1.5"
-                        onClick={() => window.open(walletUrl, "_blank", "noopener")}
+                        className="text-xs h-7 bg-primary text-primary-foreground hover:bg-primary/90 shrink-0"
+                        disabled={!manualAllocId[pr.contractId]?.trim() || !onCompleteFunding}
+                        onClick={() => {
+                          const id = manualAllocId[pr.contractId]?.trim()
+                          if (id) onCompleteFunding?.(pr.contractId, id)
+                        }}
                       >
-                        <Wallet className="size-3" />Allocate in Wallet
-                        <ExternalLink className="size-3" />
+                        <CheckCircle2 className="size-3" />Complete
                       </Button>
-                    </motion.div>
-                  )}
-                  {hasAllocation && (
-                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                      <Button
-                        size="sm"
-                        className="text-xs h-8 bg-primary text-primary-foreground hover:bg-primary/90"
-                        onClick={() => pr.allocationCid && onCompleteFunding?.(pr.contractId, pr.allocationCid)}
-                        disabled={!onCompleteFunding}
-                      >
-                        <CheckCircle2 className="size-3" />Complete Funding
-                      </Button>
-                    </motion.div>
+                    </div>
                   )}
                 </motion.div>
               )
@@ -533,40 +557,63 @@ export function LenderDashboard({
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.15 + i * 0.06, duration: 0.35 }}
-                  className="flex items-center gap-4 rounded-xl border border-border p-4 transition-colors duration-200"
+                  className="rounded-xl border border-border p-4 transition-colors duration-200"
                 >
-                  <div className="flex flex-col gap-1 flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-foreground">
-                        Repayment: {formatCurrency(rr.repaymentAmount)}
-                      </span>
-                      <Badge className={cn("text-[10px] font-medium",
-                        hasAllocation
-                          ? "bg-primary/10 text-primary border-transparent"
-                          : "bg-warning/10 text-foreground border-transparent"
-                      )}>
-                        {hasAllocation ? "ready to complete" : "awaiting borrower"}
-                      </Badge>
+                  <div className="flex items-center gap-4">
+                    <div className="flex flex-col gap-1 flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-foreground">
+                          Repayment: {formatCurrency(rr.repaymentAmount)}
+                        </span>
+                        <Badge className={cn("text-[10px] font-medium",
+                          hasAllocation
+                            ? "bg-primary/10 text-primary border-transparent"
+                            : "bg-warning/10 text-foreground border-transparent"
+                        )}>
+                          {hasAllocation ? "ready to complete" : "awaiting borrower"}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <span>From borrower</span>
+                        <span>Requested {formatDate(rr.requestedAt)}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <span>From borrower</span>
-                      <span>Requested {formatDate(rr.requestedAt)}</span>
-                    </div>
+                    {hasAllocation && (
+                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                        <Button
+                          size="sm"
+                          className="text-xs h-8 bg-primary text-primary-foreground hover:bg-primary/90 shrink-0"
+                          onClick={() => rr.allocationCid && onCompleteRepayment?.(rr.contractId, rr.allocationCid)}
+                          disabled={!onCompleteRepayment}
+                        >
+                          <CheckCircle2 className="size-3" />Complete Repayment
+                        </Button>
+                      </motion.div>
+                    )}
+                    {!hasAllocation && (
+                      <span className="text-xs text-muted-foreground shrink-0">Borrower allocating tokens…</span>
+                    )}
                   </div>
-                  {hasAllocation && (
-                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  {!hasAllocation && (
+                    <div className="mt-3 flex items-center gap-2">
+                      <Input
+                        className="h-7 text-xs flex-1"
+                        placeholder="Or paste borrower's allocation contract ID to complete manually…"
+                        value={manualAllocId[rr.contractId] ?? ""}
+                        onChange={(e) => setManualAllocId((prev) => ({ ...prev, [rr.contractId]: e.target.value }))}
+                      />
                       <Button
                         size="sm"
-                        className="text-xs h-8 bg-primary text-primary-foreground hover:bg-primary/90"
-                        onClick={() => rr.allocationCid && onCompleteRepayment?.(rr.contractId, rr.allocationCid)}
-                        disabled={!onCompleteRepayment}
+                        className="text-xs h-7 bg-primary text-primary-foreground hover:bg-primary/90 shrink-0"
+                        disabled={!manualAllocId[rr.contractId]?.trim() || !onCompleteRepayment}
+                        onClick={() => {
+                          const id = manualAllocId[rr.contractId]?.trim()
+                          if (id) onCompleteRepayment?.(rr.contractId, id)
+                        }}
                       >
-                        <CheckCircle2 className="size-3" />Complete Repayment
+                        <CheckCircle2 className="size-3" />Complete
                       </Button>
-                    </motion.div>
-                  )}
-                  {!hasAllocation && (
-                    <span className="text-xs text-muted-foreground">Borrower allocating tokens...</span>
+                    </div>
                   )}
                 </motion.div>
               )

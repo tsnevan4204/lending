@@ -226,6 +226,7 @@ export function BorrowerDashboard({
   fundingIntents = [],
   matchedProposals = [],
   onCreateRequest,
+  onWithdrawRequest,
   onAcceptOffer,
   onAcceptOfferWithToken,
   onRepay,
@@ -246,6 +247,7 @@ export function BorrowerDashboard({
   fundingIntents?: ApiFundingIntent[]
   matchedProposals?: ApiMatchedProposal[]
   onCreateRequest?: (payload: { amount: number; interestRate: number; duration: number; purpose: string }) => Promise<void>
+  onWithdrawRequest?: (contractId: string) => Promise<void>
   onAcceptOffer?: (offerContractId: string, creditProfileId: string) => Promise<void>
   onAcceptOfferWithToken?: (offerContractId: string, creditProfileId: string) => Promise<void>
   onRepay?: (loanContractId: string) => Promise<void>
@@ -368,6 +370,18 @@ export function BorrowerDashboard({
                     <Button size="sm" variant="outline" className="text-xs h-8">View<ArrowRight className="size-3" /></Button>
                   </motion.div>
                 )}
+                {request.status === "open" && onWithdrawRequest && (
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-xs text-destructive hover:text-destructive hover:bg-destructive/5 h-8"
+                      onClick={() => onWithdrawRequest(request.id)}
+                    >
+                      Withdraw
+                    </Button>
+                  </motion.div>
+                )}
               </div>
             </motion.div>
           ))}
@@ -375,9 +389,9 @@ export function BorrowerDashboard({
       </motion.section>
 
       {/* My Asks (order book) */}
-      {myAsks.length > 0 && (
-        <motion.section variants={fadeUp}>
-          <h3 className="text-sm font-semibold text-foreground mb-4">My Order Book Asks</h3>
+      <motion.section variants={fadeUp}>
+        <h3 className="text-sm font-semibold text-foreground mb-4">My Order Book Asks</h3>
+        {myAsks.length > 0 ? (
           <div className="flex flex-col gap-3">
             {myAsks.map((ask, i) => (
               <motion.div
@@ -412,8 +426,12 @@ export function BorrowerDashboard({
               </motion.div>
             ))}
           </div>
-        </motion.section>
-      )}
+        ) : (
+          <div className="rounded-xl border border-border p-8 text-center">
+            <p className="text-sm text-muted-foreground">No active asks. Place an ask to participate in the order book.</p>
+          </div>
+        )}
+      </motion.section>
 
       {/* Pending Offers */}
       {offers.length > 0 && (

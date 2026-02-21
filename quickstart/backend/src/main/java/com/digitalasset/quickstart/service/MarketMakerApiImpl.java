@@ -92,6 +92,12 @@ public class MarketMakerApiImpl implements MarketApi {
             return ledger.create(template,
                     commandId != null ? commandId : UUID.randomUUID().toString(), party)
                     .thenApply(v -> {
+                        // Trigger a matching cycle 2 s later so PQS has time to index the new bid
+                        CompletableFuture.delayedExecutor(2, java.util.concurrent.TimeUnit.SECONDS)
+                                .execute(() -> {
+                                    try { marketMakerService.scheduledMatch(); }
+                                    catch (Exception e) { logger.debug("[createLenderBid] async match failed: {}", e.getMessage()); }
+                                });
                         LenderBidResponse resp = new LenderBidResponse();
                         resp.setContractId("");
                         resp.setLender(party);
@@ -151,18 +157,35 @@ public class MarketMakerApiImpl implements MarketApi {
             BigDecimal maxRate = body.getMaxInterestRate() != null
                     ? BigDecimal.valueOf(body.getMaxInterestRate()) : BigDecimal.ZERO;
             int duration = body.getDuration() != null ? body.getDuration() : 30;
+
+            // Validate credit profile exists
+            String creditProfileContractId = body.getCreditProfileId();
+            if (creditProfileContractId == null || creditProfileContractId.isEmpty() ||
+                creditProfileContractId.startsWith("mock")) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Valid credit profile required to place ask");
+            }
+
+            ContractId<CreditProfile> creditProfileId = new ContractId<>(creditProfileContractId);
+
             BorrowerAsk template = new BorrowerAsk(
                     new Party(party),
                     new Party(auth.getAppProviderPartyId()),
                     amount,
                     maxRate,
                     (long) duration,
-                    new ContractId<>(body.getCreditProfileId()),
+                    creditProfileId,
                     now
             );
             return ledger.create(template,
                     commandId != null ? commandId : UUID.randomUUID().toString(), party)
                     .thenApply(v -> {
+                        // Trigger a matching cycle 2 s later so PQS has time to index the new ask
+                        CompletableFuture.delayedExecutor(2, java.util.concurrent.TimeUnit.SECONDS)
+                                .execute(() -> {
+                                    try { marketMakerService.scheduledMatch(); }
+                                    catch (Exception e) { logger.debug("[createBorrowerAsk] async match failed: {}", e.getMessage()); }
+                                });
                         BorrowerAskResponse resp = new BorrowerAskResponse();
                         resp.setContractId("");
                         resp.setBorrower(party);

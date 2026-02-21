@@ -69,7 +69,8 @@ public class DamlRepository {
     private static <T extends Template> List<Contract<T>> handlePqsTemplateNotFound(Throwable ex, String templateName) {
         var cause = ex instanceof CompletionException ce ? ce.getCause() : ex;
         if (cause != null && isPqsIdentifierNotFound(cause)) {
-            logger.info("{} template not yet in PQS schema (Identifier not found), returning empty list", templateName);
+            logger.warn("{} template not yet in PQS schema (Identifier not found), returning empty list. " +
+                    "Restart the PQS pipeline after deploying the licensing DAR (e.g. make restart-service SERVICE=pqs-app-provider).", templateName);
             return Collections.emptyList();
         }
         throw ex instanceof RuntimeException re ? re : new CompletionException(ex);

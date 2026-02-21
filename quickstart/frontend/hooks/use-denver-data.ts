@@ -31,6 +31,7 @@ import {
   createBorrowerAsk as apiCreateBorrowerAsk,
   cancelLenderBid as apiCancelLenderBid,
   cancelBorrowerAsk as apiCancelBorrowerAsk,
+  withdrawLoanRequest as apiWithdrawLoanRequest,
   acceptOfferWithToken as apiAcceptOfferWithToken,
   confirmFundingIntent as apiConfirmFundingIntent,
   listFundingIntents,
@@ -191,21 +192,29 @@ export function useDenverData() {
       try {
         await apiCreateLoanRequest(payload)
 
-        let cpId = creditProfile?.contractId
-        if (!cpId) {
-          const freshProfile = await getCreditProfile()
-          cpId = freshProfile?.contractId
-        }
-        if (cpId) {
-          await apiCreateBorrowerAsk({
-            amount: payload.amount,
-            maxInterestRate: payload.interestRate,
-            duration: payload.duration,
-            creditProfileId: cpId,
-          })
+        // Best-effort: place a matching BorrowerAsk in the order book.
+        // If this fails we still complete the loan request creation.
+        try {
+          let cpId = creditProfile?.contractId
+          if (!cpId) {
+            const freshProfile = await getCreditProfile()
+            cpId = freshProfile?.contractId
+          }
+          if (cpId) {
+            await apiCreateBorrowerAsk({
+              amount: payload.amount,
+              maxInterestRate: payload.interestRate,
+              duration: payload.duration,
+              creditProfileId: cpId,
+            })
+          }
+        } catch {
+          // BorrowerAsk creation failed — loan request is still valid,
+          // borrower can place an ask manually from the dashboard.
         }
 
-        await refreshWithRetry(2, 1500)
+        // 3 retries at 2 s each: first load shows the request, later loads pick up matched proposals
+        await refreshWithRetry(3, 2000)
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to create loan request")
         throw e
@@ -275,7 +284,8 @@ export function useDenverData() {
       setError(null)
       try {
         await apiCreateLenderBid(payload)
-        await refreshWithRetry(2, 1500)
+        // 3 retries at 2 s each: first load shows the bid, later loads pick up matched proposals
+        await refreshWithRetry(3, 2000)
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to create lender bid")
         throw e
@@ -289,7 +299,8 @@ export function useDenverData() {
       setError(null)
       try {
         await apiCreateBorrowerAsk(payload)
-        await refreshWithRetry(2, 1500)
+        // 3 retries at 2 s each: first load shows the ask, later loads pick up matched proposals
+        await refreshWithRetry(3, 2000)
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to create borrower ask")
         throw e
@@ -326,6 +337,20 @@ export function useDenverData() {
     [refreshWithRetry]
   )
 
+  const withdrawLoanRequest = useCallback(
+    async (contractId: string) => {
+      setError(null)
+      try {
+        await apiWithdrawLoanRequest(contractId)
+        await refreshWithRetry(2, 1500)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to withdraw loan request")
+        throw e
+      }
+    },
+    [refreshWithRetry]
+  )
+
   // --- Matched Proposals ---
 
   const acceptProposal = useCallback(
@@ -333,7 +358,8 @@ export function useDenverData() {
       setError(null)
       try {
         await apiAcceptMatchedProposal(contractId)
-        await refreshWithRetry(2, 1500)
+        // 3 retries at 2 s each: gives PQS time to index the new Loan contract
+        await refreshWithRetry(3, 2000)
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to accept proposal")
         throw e
@@ -435,6 +461,7 @@ export function useDenverData() {
     authStatus,
     currentUser,
     walletUrl,
+    updateWalletUrl: (url: string | null) => setWalletUrl(url),
     login,
     logout,
     // Data
@@ -463,6 +490,7 @@ export function useDenverData() {
     createBorrowerAsk,
     cancelLenderBid,
     cancelBorrowerAsk,
+    withdrawLoanRequest,
     // Matched proposals
     acceptProposal,
     rejectProposal,

@@ -37,10 +37,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 import quickstart_licensing.loan.creditprofile.CreditProfile;
@@ -196,6 +198,27 @@ public class LoanApiImpl implements LoansApi {
                             });
                 });
         });
+    }
+
+    /**
+     * Withdraw a loan request (borrower). Exercises LoanRequest_Withdraw on the DAML smart contract,
+     * archiving the contract. Controller: borrower.
+     */
+    @WithSpan
+    @DeleteMapping("/loans/requests/{contractId}")
+    public CompletableFuture<ResponseEntity<Void>> withdrawLoanRequest(
+            @PathVariable("contractId") String contractId,
+            @RequestParam(value = "commandId", required = false) String commandId) {
+        var ctx = tracingCtx(logger, "withdrawLoanRequest", "contractId", contractId);
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
+                damlRepository.findLoanRequestById(contractId).thenCompose(opt -> {
+                    var req = ensurePresent(opt, "LoanRequest not found: %s", contractId);
+                    var choice = new LoanRequest.LoanRequest_Withdraw();
+                    return ledger.exerciseAndGetResult(req.contractId, choice,
+                            commandId != null ? commandId : UUID.randomUUID().toString(), party)
+                            .thenApply(v -> ResponseEntity.<Void>noContent().build());
+                })
+        ));
     }
 
     @Override

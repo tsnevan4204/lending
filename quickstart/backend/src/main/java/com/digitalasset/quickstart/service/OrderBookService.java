@@ -41,6 +41,16 @@ public class OrderBookService {
 
         return bidsFuture.thenCombine(asksFuture, (lenderBids, borrowerAsks) -> {
             logger.info("[OrderBook] building order book: lenderBids={} borrowerAsks={}", lenderBids.size(), borrowerAsks.size());
+            if (borrowerAsks.isEmpty()) {
+                logger.warn("[OrderBook] bids are empty (no BorrowerAsk contracts in PQS). " +
+                        "If borrowers have placed asks, ensure BorrowerAsk is indexed: restart PQS (e.g. make restart-service SERVICE=pqs-app-provider).");
+            } else {
+                logger.info("[OrderBook] borrowerAsk sample: first contractId={}, amount={}, rate={}, duration={}",
+                        borrowerAsks.get(0).contractId.getContractId,
+                        borrowerAsks.get(0).payload.getAmount,
+                        borrowerAsks.get(0).payload.getMaxInterestRate,
+                        borrowerAsks.get(0).payload.getDuration);
+            }
             // Aggregate asks (LenderBids = lenders offering supply) by rate+duration
             var askMap = new LinkedHashMap<String, Tier>();
             for (var c : lenderBids) {

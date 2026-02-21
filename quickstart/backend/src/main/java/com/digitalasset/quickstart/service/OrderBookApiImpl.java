@@ -38,6 +38,7 @@ public class OrderBookApiImpl implements OrderbookApi {
         var ctx = tracingCtx(logger, "getOrderBook");
         return traceServiceCallAsync(ctx, () ->
                 orderBookService.buildOrderBook().thenApply(ob -> {
+                    logger.debug("[getOrderBook] returning asks={} bids={}", ob.asks().size(), ob.bids().size());
                     OrderBookResponse resp = new OrderBookResponse();
                     resp.setAsks(ob.asks().stream().map(t -> {
                         OrderBookTier tier = new OrderBookTier();

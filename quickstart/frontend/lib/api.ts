@@ -470,6 +470,13 @@ export async function createBorrowerAsk(payload: {
   return mapBorrowerAsk(raw)
 }
 
+/** Withdraw a loan request (borrower). Exercises LoanRequest_Withdraw on the smart contract. */
+export async function withdrawLoanRequest(contractId: string): Promise<void> {
+  await fetchApi(`/loans/requests/${encodeURIComponent(contractId)}?commandId=${encodeURIComponent(commandId())}`, {
+    method: "DELETE",
+  })
+}
+
 /** Cancel a lender bid. */
 export async function cancelLenderBid(contractId: string): Promise<void> {
   await fetchApi(`/market/lender-bids/${encodeURIComponent(contractId)}?commandId=${encodeURIComponent(commandId())}`, {

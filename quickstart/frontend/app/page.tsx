@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { AnimatePresence, motion } from "motion/react"
-import { LogOut, Loader2, X } from "lucide-react"
+import { LogOut, Loader2, X, Wallet } from "lucide-react"
 import { AppSidebar } from "@/components/denver/app-sidebar"
 import { LoginScreen } from "@/components/denver/login-screen"
 import { BorrowerDashboard } from "@/components/denver/borrower-dashboard"
@@ -11,15 +11,29 @@ import { MarketDepth } from "@/components/denver/market-depth"
 import { OrderBook } from "@/components/denver/order-book"
 import { CreditScoreCard } from "@/components/denver/credit-score-card"
 import { useDenverData } from "@/hooks/use-denver-data"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 
 export default function DenverLendingApp() {
   const [activeView, setActiveView] = useState("borrower")
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [walletDialogOpen, setWalletDialogOpen] = useState(false)
+  const [walletInput, setWalletInput] = useState("")
 
   const {
     authStatus,
     currentUser,
     walletUrl,
+    updateWalletUrl,
     login,
     logout,
     requests,
@@ -45,6 +59,7 @@ export default function DenverLendingApp() {
     cancelLenderBid,
     createBorrowerAsk,
     cancelBorrowerAsk,
+    withdrawLoanRequest,
     acceptProposal,
     rejectProposal,
     acceptOfferWithToken,
@@ -53,6 +68,10 @@ export default function DenverLendingApp() {
     requestRepayment,
     completeRepayment,
   } = useDenverData()
+
+  useEffect(() => {
+    if (walletDialogOpen) setWalletInput(walletUrl ?? "")
+  }, [walletDialogOpen, walletUrl])
 
   // ---- loading / auth states ----
 
@@ -126,6 +145,56 @@ export default function DenverLendingApp() {
                 </button>
               </span>
             )}
+            <Dialog open={walletDialogOpen} onOpenChange={setWalletDialogOpen}>
+              <DialogTrigger asChild>
+                <button
+                  title={walletUrl ? `Wallet: ${walletUrl}` : "Set wallet URL"}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Wallet className={`size-3.5 ${walletUrl ? "text-primary" : ""}`} />
+                  <span className="hidden sm:inline">{walletUrl ? "Wallet" : "Set Wallet"}</span>
+                </button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Wallet Settings</DialogTitle>
+                  <DialogDescription>
+                    Configure your Canton wallet URL for token-based transactions. This overrides the URL provided by the backend.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex flex-col gap-4 pt-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="wallet-url">Wallet URL</Label>
+                    <Input
+                      id="wallet-url"
+                      type="url"
+                      placeholder="https://wallet.example.com"
+                      value={walletInput}
+                      onChange={(e) => setWalletInput(e.target.value)}
+                    />
+                    {walletUrl && (
+                      <p className="text-xs text-muted-foreground">Current: {walletUrl}</p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+                      onClick={() => { updateWalletUrl(walletInput.trim() || null); setWalletDialogOpen(false) }}
+                    >
+                      Save Wallet URL
+                    </Button>
+                    {walletUrl && (
+                      <Button
+                        variant="outline"
+                        onClick={() => { updateWalletUrl(null); setWalletInput(""); setWalletDialogOpen(false) }}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
             <div className="flex items-center gap-2">
               <div className="size-7 rounded-full bg-secondary flex items-center justify-center">
                 <span className="text-foreground text-[10px] font-semibold">
@@ -174,6 +243,7 @@ export default function DenverLendingApp() {
                   fundingIntents={fundingIntents}
                   matchedProposals={matchedProposals}
                   onCreateRequest={createLoanRequest}
+                  onWithdrawRequest={withdrawLoanRequest}
                   onAcceptOffer={fundLoan}
                   onAcceptOfferWithToken={acceptOfferWithToken}
                   onRepay={repayLoan}
