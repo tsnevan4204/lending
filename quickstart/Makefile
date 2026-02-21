@@ -152,7 +152,6 @@ build-frontend: ## Build the frontend (Next.js static export) into frontend/dist
 	mkdir -p frontend/dist
 	cd frontend && npm ci 2>/dev/null || npm install
 	cd frontend && npm run build
-	cp -r frontend/out/. frontend/dist/
 
 .PHONY: build-backend
 build-backend: ## Build the backend service
@@ -244,6 +243,7 @@ endif
 endif
 start: $(FIRST_RUN_DEPENDENCY) build ## Start the application, and observability services if enabled
 	$(call docker-compose, ${DOCKER_COMPOSE_OBSERVABILITY_FILES} $(RESOURCE_CONSTRAINT_CONFIG) up -d --no-recreate)
+	$(call docker-compose, restart nginx backend-service)
 
 .PHONY: start-vite-dev
 start-vite-dev: ## Start the frontend application in development mode
@@ -378,8 +378,9 @@ clean-shell: docker-available ## Stop and remove the Daml Shell container
 
 # Clean targets
 .PHONY: clean
-clean: ## Clean the build artifacts
+clean: ## Clean the build artifacts (Gradle, frontend dist and Next.js cache)
 	./gradlew clean
+	rm -rf frontend/dist frontend/.next
 
 .PHONY: clean-docker
 clean-docker: clean-shell clean-canton-console ## Stop and remove application Docker containers and volumes
